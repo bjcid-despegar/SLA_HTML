@@ -1,0 +1,50 @@
+name: Publicar reporte en GitHub Pages
+
+# Se ejecuta cuando cambia el CSV, la plantilla o el script de build.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modelo_base_camp.csv'
+      - 'plantilla_reporte.html'
+      - 'build_report.py'
+      - '.github/workflows/build-report.yml'
+  workflow_dispatch:   # permite publicarlo a mano desde la pestaña Actions
+
+# Permisos que necesita el despliegue a Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Una sola publicación a la vez
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generar sitio con datos incrustados
+        run: python build_report.py
+
+      - name: Subir artefacto de Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Desplegar a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
