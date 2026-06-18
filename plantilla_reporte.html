@@ -496,7 +496,7 @@ function implMonth(r){
   if(m) return parseInt(m[2],10);
   return isNaN(r.mes)?null:r.mes;   // respaldo si la fecha no es parseable
 }
-const PALETTE=['#7c3aed','#0d9488','#f97316','#3b82f6','#db2777','#65a30d','#9333ea','#0891b2','#ea580c','#0ea5e9','#a16207','#be123c'];
+const PALETTE=['#a78bfa','#5ec5bc','#fbb07a','#7dabf5','#ec8bbf','#a6c97a','#c19fe6','#67bdd6','#f0a877','#74c6ef','#cbab74','#e08e9f'];
 function renderBar(rows){
   const byMM={};
   rows.forEach(r=>{const mo=implMonth(r); if(mo==null||!r.carga)return;
@@ -511,9 +511,22 @@ function renderBar(rows){
   const allVals=[];
   members.forEach(mem=>months.forEach(mo=>{const x=cnt(mem,mo);if(x>0)allVals.push(x);}));
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
-  datasets.push({type:'line',label:'Promedio',
+  datasets.push({type:'line',label:'Promedio de campañas',
     data:months.map(()=>avg),borderColor:'#dc2626',borderWidth:2,borderDash:[6,5],
     pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:0});
+
+  /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) + desglose por miembro */
+  const slaMonth={},slaMemMonth={};
+  rows.forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
+    (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);
+    if(r.carga){slaMemMonth[r.carga]=slaMemMonth[r.carga]||{};
+      (slaMemMonth[r.carga][mo]=slaMemMonth[r.carga][mo]||[]).push(r.sla_ok);}});
+  const slaMembers=Object.keys(slaMemMonth).sort((a,b)=>a.localeCompare(b,'es'));
+  datasets.push({type:'line',label:'SLA Ratio',isSlaRatio:true,yAxisID:'y1',
+    data:months.map(mo=>{const v=mean(slaMonth[mo]||[]);return v==null?null:+(v*100).toFixed(1);}),
+    borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
+    pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#1e1b2e',pointBorderColor:'#fff',pointBorderWidth:1,
+    fill:false,tension:.3,spanGaps:true,order:0});
   if(chart)chart.destroy();
   const endLabel={id:'endLabel',afterDatasetsDraw(c){
     const di=c.data.datasets.findIndex(d=>d.type==='line'); if(di<0)return;
@@ -528,15 +541,40 @@ function renderBar(rows){
     ctx.fillStyle='#fff';ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.strokeText(txt,x,p.y-9);
     ctx.fillStyle='#b91c1c';ctx.fillText(txt,x,p.y-9);
     ctx.restore();}};
+  /* etiqueta numérica del SLA Ratio en cada mes */
+  const slaLabels={id:'slaLabels',afterDatasetsDraw(c){
+    const di=c.data.datasets.findIndex(d=>d.isSlaRatio); if(di<0)return;
+    const meta=c.getDatasetMeta(di); if(meta.hidden)return;
+    const ctx=c.ctx; ctx.save();
+    ctx.font='bold 11px Segoe UI';ctx.textAlign='center';ctx.textBaseline='bottom';
+    meta.data.forEach((pt,i)=>{const val=c.data.datasets[di].data[i]; if(val==null)return;
+      const txt=val.toFixed(1)+'%';
+      ctx.lineWidth=4;ctx.strokeStyle='#fff';ctx.strokeText(txt,pt.x,pt.y-7);
+      ctx.fillStyle='#1e1b2e';ctx.fillText(txt,pt.x,pt.y-7);});
+    ctx.restore();}};
   chart=new Chart(document.getElementById('barChart'),{
     type:'bar',
     data:{labels:months.map(m=>MES[m]||m),datasets},
     options:{responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:18}},
       plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true,pointStyle:'rectRounded'}},
-        tooltip:{callbacks:{label:c=>c.dataset.type==='line'?'Promedio: '+(+c.parsed.y).toFixed(1):c.dataset.label+': '+c.parsed.y+' campañas'}}},
+        tooltip:{callbacks:{
+          label:c=>{
+            if(c.dataset.isSlaRatio) return 'SLA Ratio: '+(c.parsed.y==null?'–':(+c.parsed.y).toFixed(1)+'%');
+            if(c.dataset.type==='line') return 'Promedio de campañas: '+(+c.parsed.y).toFixed(1);
+            return c.dataset.label+': '+c.parsed.y+' campañas';},
+          afterBody:items=>{
+            const it=items.find(i=>i.dataset&&i.dataset.isSlaRatio); if(!it)return;
+            const mo=months[it.dataIndex];
+            const lines=['','SLA Ratio por miembro:'];
+            slaMembers.forEach(mem=>{const v=mean((slaMemMonth[mem]||{})[mo]||[]);
+              if(v!=null) lines.push('  '+mem+': '+(v*100).toFixed(1)+'%');});
+            return lines.length>2?lines:null;}}}},
       scales:{x:{grid:{display:false}},
-              y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},title:{display:true,text:'Número de Campañas'}}}},
-    plugins:[endLabel]});
+              y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},title:{display:true,text:'Número de Campañas'}},
+              y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false},
+                  ticks:{callback:v=>v+'%'},title:{display:true,text:'SLA Ratio (%)'}}}},
+    plugins:[endLabel,slaLabels]});
 }
 
 /* ---------- pivots ---------- */
@@ -628,7 +666,8 @@ function updateSlaText(){
   }else{
     lg.innerHTML=`<span class="chip"><span class="sw" style="background:rgb(191,232,201)"></span> mayor cumplimiento</span>
       <span class="chip"><span class="sw" style="background:rgb(253,233,169)"></span> medio</span>
-      <span class="chip"><span class="sw" style="background:rgb(247,197,197)"></span> menor cumplimiento</span>`;
+      <span class="chip"><span class="sw" style="background:rgb(247,197,197)"></span> menor cumplimiento</span>
+      <span class="chip">↔ doble clic para ver registros</span>`;
     nt.innerHTML='Promedio de <b>sla_ok</b> (1 = cumplió, 0 = no; los nulos se omiten), como % de cumplimiento. Semáforo: verde = más cumplimiento. En esta vista el umbral en días no aplica. Doble clic para ver registros.';
   }
 }
