@@ -2,7 +2,7 @@
 <html lang="es">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reporte de Campañas · Equipo AdOps</title>
+<title>Reporte de Campañas · Vista Managers · Equipo AdOps</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -135,24 +135,6 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
 .toast.show{opacity:1;transform:none}
 .toast.err{background:var(--bad-tx)}
 
-/* ---- Gate de acceso (contraseña) ---- */
-#gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,var(--brand-500));padding:20px}
-#gate .box{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);
-  padding:30px 28px;width:360px;max-width:100%;text-align:center}
-#gate .glogo{width:52px;height:52px;border-radius:14px;background:var(--brand-600);color:#fff;
-  display:grid;place-items:center;font-weight:800;font-size:26px;margin:0 auto 14px}
-#gate h2{margin:0 0 6px;font-size:18px;color:var(--ink)}
-#gate p{margin:0 0 18px;font-size:13px;color:var(--muted);line-height:1.5}
-#gate input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;
-  font-size:14px;font-family:inherit;margin-bottom:12px;text-align:center}
-#gate input:focus{outline:none;border-color:var(--brand-500)}
-#gate button{width:100%;border:0;border-radius:10px;padding:11px;font-size:14px;font-weight:700;
-  background:var(--brand-600);color:#fff;cursor:pointer;font-family:inherit}
-#gate button:hover{background:var(--brand-700)}
-#gate .err{color:var(--bad-tx);font-size:12.5px;min-height:16px;margin-top:10px}
-body.locked{overflow:hidden}
-
 @media (max-width:980px){.cards{grid-template-columns:repeat(2,1fr)}.card-dual{grid-column:span 2}}
 @media print{
   body{background:#fff}
@@ -166,24 +148,13 @@ body.locked{overflow:hidden}
 }
 </style>
 
-<div id="gate">
-  <div class="box">
-    <div class="glogo">D</div>
-    <h2>Reporte de Campañas · AdOps</h2>
-    <p>Contenido privado del equipo. Ingresá la contraseña para ver el reporte.</p>
-    <input type="password" id="gatePass" placeholder="Contraseña" autocomplete="current-password">
-    <button id="gateBtn">Ingresar</button>
-    <div class="err" id="gateErr"></div>
-  </div>
-</div>
-
 <header>
   <div class="head-in">
     <div class="brand">
       <div class="logo">D</div>
       <div>
         <h1>Reporte de Campañas · Equipo AdOps</h1>
-        <p>Performance de placements · SLA &amp; CTR · histórico 2026</p>
+        <p>Resultado general del equipo · SLA &amp; CTR · histórico 2026</p>
       </div>
     </div>
     <div class="head-meta">
@@ -220,16 +191,6 @@ body.locked{overflow:hidden}
 
     <div class="controls">
       <div class="ctl">
-        <label>Filtro · Carga (equipo)</label>
-        <div class="ms" id="msCarga">
-          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
-          <div class="ms-panel">
-            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
-            <div class="ms-opts"></div>
-          </div>
-        </div>
-      </div>
-      <div class="ctl">
         <label>Filtro · Media (placement)</label>
         <div class="ms" id="msMedia">
           <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
@@ -237,13 +198,6 @@ body.locked{overflow:hidden}
             <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
             <div class="ms-opts"></div>
           </div>
-        </div>
-      </div>
-      <div class="ctl">
-        <label>ABN</label>
-        <div class="seg sm" id="abnSeg">
-          <button data-v="Sí">Sí</button>
-          <button data-v="No" class="active">No</button>
         </div>
       </div>
       <div class="spacer"></div>
@@ -322,16 +276,10 @@ body.locked{overflow:hidden}
 <script id="csvData" type="text/csv">__CSV_PLACEHOLDER__</script>
 
 <script>
-/* ============================================================
-   CONTRASEÑA DE ACCESO — para cambiarla, editá SOLO esta línea
-   (entre comillas) y volvé a guardar el archivo:
-   ============================================================ */
-const PASSWORD='Adops_rifa';
-
 const FILE_MAIN='modelo_base_camp.csv';
 const MES=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MODEL_ORDER=['Black','Premium','Business','Economy'];
-const REQ=['ms_campaign_id','media','carga','modelo','mes','anio','sla_ok','ctr','abn'];
+const REQ=['ms_campaign_id','media','modelo','mes','anio','sla_ok','ctr','abn'];
 
 /* Umbrales de SLA (días) incrustados — SLA.csv */
 const SLA={
@@ -343,12 +291,8 @@ const SLA={
 
 let RAW=[], chart=null, chart2=null, slaMetric='dias';
 let modalRows=[], modalName='detalle';
-const S={carga:[],media:[],abn:'No'};   // carga/media: [] = todos · abn: 'No' = sin reestructura
+const S={media:[]};   // media: [] = todos
 const drill={};
-
-/* ABN: medias cuyas implementaciones se reatribuyen al miembro virtual "ABN" */
-const ABN_MEMBER='ABN';
-const ABN_MEDIA=['ms_facebook','ms_google_display'];
 
 const norm=s=>(s==null?'':String(s)).trim();
 const numOrNull=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?null:x;};
@@ -367,30 +311,8 @@ function toast(msg,isErr){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
 }
 
-/* ---------- gate de acceso (contraseña) ---------- */
-function unlockApp(){
-  document.getElementById('gate').style.display='none';
-  document.body.classList.remove('locked');
-  init();
-}
-function gateInit(){
-  document.body.classList.add('locked');
-  const inp=document.getElementById('gatePass'),
-        btn=document.getElementById('gateBtn'),
-        err=document.getElementById('gateErr');
-  /* Si ya se validó en esta pestaña/sesión, no vuelve a pedirla */
-  if(sessionStorage.getItem('adops_ok')==='1'){ unlockApp(); return; }
-  const tryPass=()=>{
-    if(inp.value===PASSWORD){ sessionStorage.setItem('adops_ok','1'); unlockApp(); }
-    else{ err.textContent='Contraseña incorrecta'; inp.select(); }
-  };
-  btn.onclick=tryPass;
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')tryPass();});
-  inp.focus();
-}
-
 /* ---------- carga ---------- */
-window.addEventListener('DOMContentLoaded',gateInit);
+window.addEventListener('DOMContentLoaded',init);
 document.getElementById('file1').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
@@ -506,46 +428,19 @@ function makeMulti(root,values,onChange){
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
 let mmCtl=null;
-/* Lista de cargas según la reestructura ABN vigente (incluye "ABN" cuando está en Sí) */
-function cargaList(){
-  return [...new Set(applyAbn(RAW).map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-}
-/* Reconstruye el multiselect de Carga y limpia su selección */
-function rebuildCarga(){
-  S.carga=[];
-  makeMulti(document.getElementById('msCarga'),cargaList(),a=>{S.carga=a;render();});
-}
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.carga=[];S.media=[];S.abn='No';
-  rebuildCarga();
+  S.media=[];
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
-  document.querySelectorAll('#abnSeg button').forEach(b=>{
-    b.classList.toggle('active',b.dataset.v===S.abn);
-    b.onclick=()=>{
-      document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active'); S.abn=b.dataset.v;
-      rebuildCarga(); render();};});
   document.querySelectorAll('#slaSeg button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#slaSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.abn='No'; mmCtl.reset(); rebuildCarga();
-    document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.toggle('active',x.dataset.v===S.abn));
-    render();};
+    S.media=[]; mmCtl.reset(); render();};
 }
 
-/* Reestructura ABN: si está activada, los placements de ABN_MEDIA se tratan
-   como implementados por el miembro virtual "ABN" (clona la fila, no muta RAW). */
-function applyAbn(rows){
-  if(S.abn!=='Sí') return rows;
-  return rows.map(r=>ABN_MEDIA.includes(key(r.media))?{...r,carga:ABN_MEMBER}:r);
-}
-
-function filtered(opts={}){
-  return applyAbn(RAW).filter(r=>
-    (!S.media.length||S.media.includes(r.media))&&
-    (opts.carga===false||!S.carga.length||S.carga.includes(r.carga)));
+function filtered(){
+  return RAW.filter(r=> !S.media.length||S.media.includes(r.media));
 }
 
 function render(){
@@ -589,30 +484,25 @@ function implMonth(r){
 }
 const PALETTE=['#a78bfa','#5ec5bc','#fbb07a','#7dabf5','#ec8bbf','#a6c97a','#c19fe6','#67bdd6','#f0a877','#74c6ef','#cbab74','#e08e9f'];
 function renderBar(rows){
-  const byMM={};
-  rows.forEach(r=>{const mo=implMonth(r); if(mo==null||!r.carga)return;
-    byMM[r.carga]=byMM[r.carga]||{};
-    (byMM[r.carga][mo]=byMM[r.carga][mo]||new Set()).add(r.ms_campaign_id);});
-  const members=Object.keys(byMM).sort((a,b)=>a.localeCompare(b,'es'));
+  /* Total de campañas del equipo por mes (sin desglose por miembro) */
+  const byMonth={};
+  rows.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
+    (byMonth[mo]=byMonth[mo]||new Set()).add(r.ms_campaign_id);});
   const months=[...new Set(rows.map(implMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
-  const cnt=(mem,mo)=>(byMM[mem][mo]?byMM[mem][mo].size:0);
-  const datasets=members.map((mem,i)=>({label:mem,
-    data:months.map(mo=>cnt(mem,mo)),
-    backgroundColor:PALETTE[i%PALETTE.length],borderRadius:4,maxBarThickness:46}));
-  const allVals=[];
-  members.forEach(mem=>months.forEach(mo=>{const x=cnt(mem,mo);if(x>0)allVals.push(x);}));
+  const cnt=mo=>(byMonth[mo]?byMonth[mo].size:0);
+  const datasets=[{label:'Campañas',
+    data:months.map(mo=>cnt(mo)),
+    backgroundColor:PALETTE[0],borderRadius:4,maxBarThickness:46}];
+  const allVals=months.map(cnt).filter(x=>x>0);
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
   datasets.push({type:'line',label:'Promedio de campañas',
     data:months.map(()=>avg),borderColor:'#dc2626',borderWidth:2,borderDash:[6,5],
     pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:0});
 
-  /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) + desglose por miembro */
-  const slaMonth={},slaMemMonth={};
+  /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) — resultado general del equipo */
+  const slaMonth={};
   rows.forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
-    (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);
-    if(r.carga){slaMemMonth[r.carga]=slaMemMonth[r.carga]||{};
-      (slaMemMonth[r.carga][mo]=slaMemMonth[r.carga][mo]||[]).push(r.sla_ok);}});
-  const slaMembers=Object.keys(slaMemMonth).sort((a,b)=>a.localeCompare(b,'es'));
+    (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);});
   datasets.push({type:'line',label:'SLA Ratio',isSlaRatio:true,yAxisID:'y1',
     data:months.map(mo=>{const v=mean(slaMonth[mo]||[]);return v==null?null:+(v*100).toFixed(1);}),
     borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
@@ -653,14 +543,7 @@ function renderBar(rows){
           label:c=>{
             if(c.dataset.isSlaRatio) return 'SLA Ratio: '+(c.parsed.y==null?'–':(+c.parsed.y).toFixed(1)+'%');
             if(c.dataset.type==='line') return 'Promedio de campañas: '+(+c.parsed.y).toFixed(1);
-            return c.dataset.label+': '+c.parsed.y+' campañas';},
-          afterBody:items=>{
-            const it=items.find(i=>i.dataset&&i.dataset.isSlaRatio); if(!it)return;
-            const mo=months[it.dataIndex];
-            const lines=['','SLA Ratio por miembro:'];
-            slaMembers.forEach(mem=>{const v=mean((slaMemMonth[mem]||{})[mo]||[]);
-              if(v!=null) lines.push('  '+mem+': '+(v*100).toFixed(1)+'%');});
-            return lines.length>2?lines:null;}}}},
+            return c.parsed.y+' campañas';}}}},
       scales:{x:{grid:{display:false}},
               y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},title:{display:true,text:'Número de Campañas'}},
               y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false},
@@ -671,29 +554,25 @@ function renderBar(rows){
 const isActive=r=>String(r.estado||'').trim().toLowerCase()==='active';
 function renderActiveBar(rows){
   const act=rows.filter(isActive);
-  const byMM={};
-  act.forEach(r=>{const mo=implMonth(r); if(mo==null||!r.carga)return;
-    byMM[r.carga]=byMM[r.carga]||{};
-    (byMM[r.carga][mo]=byMM[r.carga][mo]||new Set()).add(r.ms_campaign_id);});
-  const members=Object.keys(byMM).sort((a,b)=>a.localeCompare(b,'es'));
+  /* Total de campañas activas del equipo por mes (sin desglose por miembro) */
+  const byMonth={};
+  act.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
+    (byMonth[mo]=byMonth[mo]||new Set()).add(r.ms_campaign_id);});
   const months=[...new Set(act.map(implMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
-  const cnt=(mem,mo)=>(byMM[mem][mo]?byMM[mem][mo].size:0);
-  const datasets=members.map((mem,i)=>({label:mem,
-    data:months.map(mo=>cnt(mem,mo)),
-    backgroundColor:PALETTE[i%PALETTE.length],borderRadius:4,maxBarThickness:46}));
+  const cnt=mo=>(byMonth[mo]?byMonth[mo].size:0);
+  const datasets=[{label:'Campañas activas',
+    data:months.map(mo=>cnt(mo)),
+    backgroundColor:PALETTE[0],borderRadius:4,maxBarThickness:46}];
 
   /* CTR promedio por mes (solo campañas activas) — línea de tendencia, eje derecho.
      Se calcula igual que la tabla: suma(clicks)/suma(shows)*100, usando numCount
      para descartar separadores de miles (, . ó espacio) y no inflar los valores. */
-  const ctrMonth={},ctrMemMonth={};
+  const ctrMonth={};
   const accum=o=>{o.cs=o.cs||0;o.ss=o.ss||0;return o;};
   const ctrPct=o=>(o&&o.ss>0)?o.cs/o.ss*100:null;
   act.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
     const c=numCount(r.clicks),s=numCount(r.shows); if(c==null||s==null)return;
-    const m=accum(ctrMonth[mo]=ctrMonth[mo]||{});m.cs+=c;m.ss+=s;
-    if(r.carga){ctrMemMonth[r.carga]=ctrMemMonth[r.carga]||{};
-      const mm=accum(ctrMemMonth[r.carga][mo]=ctrMemMonth[r.carga][mo]||{});mm.cs+=c;mm.ss+=s;}});
-  const ctrMembers=Object.keys(ctrMemMonth).sort((a,b)=>a.localeCompare(b,'es'));
+    const m=accum(ctrMonth[mo]=ctrMonth[mo]||{});m.cs+=c;m.ss+=s;});
   datasets.push({type:'line',label:'CTR promedio',isCtr:true,yAxisID:'y1',
     data:months.map(mo=>{const v=ctrPct(ctrMonth[mo]);return v==null?null:+v.toFixed(2);}),
     borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
@@ -720,14 +599,7 @@ function renderActiveBar(rows){
         tooltip:{callbacks:{
           label:c=>{
             if(c.dataset.isCtr) return 'CTR promedio: '+(c.parsed.y==null?'–':(+c.parsed.y).toFixed(2));
-            return c.dataset.label+': '+c.parsed.y+' campañas activas';},
-          afterBody:items=>{
-            const it=items.find(i=>i.dataset&&i.dataset.isCtr); if(!it)return;
-            const mo=months[it.dataIndex];
-            const lines=['','CTR promedio por miembro:'];
-            ctrMembers.forEach(mem=>{const v=ctrPct((ctrMemMonth[mem]||{})[mo]);
-              if(v!=null) lines.push('  '+mem+': '+v.toFixed(2));});
-            return lines.length>2?lines:null;}}}},
+            return c.parsed.y+' campañas activas';}}}},
       scales:{x:{grid:{display:false}},
               y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},title:{display:true,text:'Campañas Activas'}},
               y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},
@@ -755,40 +627,35 @@ function cellVal(kind,arr){
   return mean(arr.map(r=>r.sla_ok).filter(v=>v!=null));
 }
 
+/* Pivot sin la dimensión "Carga": agrupa por Modelo › Media (resultado del equipo) */
 function renderPivot(kind,rows){
   const months=[...new Set(rows.map(r=>r.mes).filter(m=>!isNaN(m)))].sort((a,b)=>a-b);
   const tree={};
-  rows.forEach(r=>{const c=r.carga||'(sin carga)',md=r.modelo||'(sin modelo)',me=r.media||'(sin media)';
-    tree[c]=tree[c]||{};tree[c][md]=tree[c][md]||{};(tree[c][md][me]=tree[c][md][me]||[]).push(r);});
-  const cargas=Object.keys(tree).sort((a,b)=>a.localeCompare(b,'es'));
+  rows.forEach(r=>{const md=r.modelo||'(sin modelo)',me=r.media||'(sin media)';
+    tree[md]=tree[md]||{};(tree[md][me]=tree[md][me]||[]).push(r);});
   const rank=m=>{const i=MODEL_ORDER.findIndex(x=>x.toLowerCase()===m.toLowerCase());return i<0?99:i;};
+  const models=Object.keys(tree).sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
 
   let lo=Infinity,hi=-Infinity;
-  if(kind==='ctr'){cargas.forEach(c=>Object.keys(tree[c]).forEach(md=>Object.keys(tree[c][md]).forEach(me=>{
-    months.forEach(mo=>{const v=cellVal('ctr',tree[c][md][me].filter(r=>r.mes===mo));if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}});
-    const v=cellVal('ctr',tree[c][md][me]);if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}})));
+  if(kind==='ctr'){models.forEach(md=>Object.keys(tree[md]).forEach(me=>{
+    months.forEach(mo=>{const v=cellVal('ctr',tree[md][me].filter(r=>r.mes===mo));if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}});
+    const v=cellVal('ctr',tree[md][me]);if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}}));
     if(lo===Infinity){lo=0;hi=1;}}
 
-  let html=`<thead><tr><th class="dim">Carga</th><th class="dim">Modelo</th><th class="dim">Media</th>`+
+  let html=`<thead><tr><th class="dim">Modelo</th><th class="dim">Media</th>`+
     months.map(m=>`<th>${MES[m]||m}</th>`).join('')+`<th class="prom" style="color:#fff">Prom.</th></tr></thead><tbody>`;
 
-  cargas.forEach(c=>{
-    const models=Object.keys(tree[c]).sort((a,b)=>rank(a)-rank(b)||a.localeCompare(b));
-    let cargaRows=0;models.forEach(md=>cargaRows+=Object.keys(tree[c][md]).length);
-    let firstC=true;
-    models.forEach(md=>{
-      const medias=Object.keys(tree[c][md]).sort((a,b)=>a.localeCompare(b,'es'));
-      let firstM=true;
-      medias.forEach((me,idx)=>{
-        html+='<tr'+(idx===medias.length-1?' class="grp-end"':'')+'>';
-        if(firstC){html+=`<td class="dim" rowspan="${cargaRows}">${esc(c)}</td>`;firstC=false;}
-        if(firstM){html+=`<td class="dim" rowspan="${medias.length}">${esc(md)}</td>`;firstM=false;}
-        html+=`<td class="dim media">${esc(me)}</td>`;
-        months.forEach(mo=>{const arr=tree[c][md][me].filter(r=>r.mes===mo);
-          html+=cellHTML(kind,arr,c,md,me,mo,lo,hi,false);});
-        html+=cellHTML(kind,tree[c][md][me],c,md,me,'ALL',lo,hi,true);
-        html+='</tr>';
-      });
+  models.forEach(md=>{
+    const medias=Object.keys(tree[md]).sort((a,b)=>a.localeCompare(b,'es'));
+    let firstM=true;
+    medias.forEach((me,idx)=>{
+      html+='<tr'+(idx===medias.length-1?' class="grp-end"':'')+'>';
+      if(firstM){html+=`<td class="dim" rowspan="${medias.length}">${esc(md)}</td>`;firstM=false;}
+      html+=`<td class="dim media">${esc(me)}</td>`;
+      months.forEach(mo=>{const arr=tree[md][me].filter(r=>r.mes===mo);
+        html+=cellHTML(kind,arr,md,me,mo,lo,hi,false);});
+      html+=cellHTML(kind,tree[md][me],md,me,'ALL',lo,hi,true);
+      html+='</tr>';
     });
   });
   html+='</tbody>';
@@ -796,8 +663,8 @@ function renderPivot(kind,rows){
   if(kind==='sla') updateSlaText();
 }
 
-function cellHTML(kind,arr,c,md,me,mo,lo,hi,isProm){
-  const k=`${kind}|${c}|${md}|${me}|${mo}`; drill[k]=arr;
+function cellHTML(kind,arr,md,me,mo,lo,hi,isProm){
+  const k=`${kind}|${md}|${me}|${mo}`; drill[k]=arr;
   const v=cellVal(kind,arr);
   const cls='val'+(isProm?' prom':'');
   if(v==null||!arr.length) return `<td class="${cls} empty" data-k="${k}">–</td>`;
@@ -841,14 +708,14 @@ function updateSlaText(){
   const arr=drill[td.dataset.k];if(!arr||!arr.length)return;
   openModal(td.dataset.k,arr);}));
 
-const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','carga','abn',
+const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','abn',
   'mes','semana','clicks','shows','ctr','sla','sla_ok','estado','fecha_implementacion','primera_impresion','fecha_inicio_campania','fecha_fin_campania','monto'];
 
 function openModal(k,arr){
-  const [kind,c,md,me,mo]=k.split('|');
-  modalRows=arr; modalName=`${kind}_${c}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
+  const [kind,md,me,mo]=k.split('|');
+  modalRows=arr; modalName=`${kind}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
   document.getElementById('mTitle').textContent=
-    `${kind.toUpperCase()} · ${c} › ${md} › ${me} · ${mo==='ALL'?'todos los meses':(MES[+mo]||mo)}`;
+    `${kind.toUpperCase()} · ${md} › ${me} · ${mo==='ALL'?'todos los meses':(MES[+mo]||mo)}`;
   document.getElementById('mCount').textContent=arr.length+' registro(s)';
   let h='<thead><tr>'+COLS.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
   arr.forEach(r=>{h+='<tr>'+COLS.map(col=>{let v=r[col];
