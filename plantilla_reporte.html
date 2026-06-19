@@ -212,10 +212,9 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
       </div>
       <div class="ctl">
         <label>ABN</label>
-        <div class="seg" id="abnSeg">
-          <button data-v="__ALL__" class="active">Todos</button>
+        <div class="seg sm" id="abnSeg">
           <button data-v="Sí">Sí</button>
-          <button data-v="No">No</button>
+          <button data-v="No" class="active">No</button>
         </div>
       </div>
       <div class="spacer"></div>
@@ -302,8 +301,12 @@ const SLA={
 
 let RAW=[], chart=null, slaMetric='dias';
 let modalRows=[], modalName='detalle';
-const S={carga:[],media:[],abn:'__ALL__'};   // carga/media: [] = todos
+const S={carga:[],media:[],abn:'No'};   // carga/media: [] = todos · abn: 'No' = sin reestructura
 const drill={};
+
+/* ABN: medias cuyas implementaciones se reatribuyen al miembro virtual "ABN" */
+const ABN_MEMBER='ABN';
+const ABN_MEDIA=['ms_facebook','ms_google_display'];
 
 const norm=s=>(s==null?'':String(s)).trim();
 const numOrNull=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?null:x;};
@@ -436,29 +439,45 @@ function makeMulti(root,values,onChange){
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
+let mmCtl=null;
+/* Lista de cargas según la reestructura ABN vigente (incluye "ABN" cuando está en Sí) */
+function cargaList(){
+  return [...new Set(applyAbn(RAW).map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+}
+/* Reconstruye el multiselect de Carga y limpia su selección */
+function rebuildCarga(){
+  S.carga=[];
+  makeMulti(document.getElementById('msCarga'),cargaList(),a=>{S.carga=a;render();});
+}
 function buildFilters(){
-  const cargas=[...new Set(RAW.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.carga=[];S.media=[];S.abn='__ALL__';
-  const mc=makeMulti(document.getElementById('msCarga'),cargas,a=>{S.carga=a;render();});
-  const mm=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
+  S.carga=[];S.media=[];S.abn='No';
+  rebuildCarga();
+  mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
   document.querySelectorAll('#abnSeg button').forEach(b=>{
-    b.classList.toggle('active',b.dataset.v==='__ALL__');
+    b.classList.toggle('active',b.dataset.v===S.abn);
     b.onclick=()=>{
       document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active'); S.abn=b.dataset.v; render();};});
+      b.classList.add('active'); S.abn=b.dataset.v;
+      rebuildCarga(); render();};});
   document.querySelectorAll('#slaSeg button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#slaSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
   document.getElementById('reset').onclick=()=>{
-    S.carga=[];S.media=[];S.abn='__ALL__'; mc.reset(); mm.reset();
-    document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.toggle('active',x.dataset.v==='__ALL__'));
+    S.media=[];S.abn='No'; mmCtl.reset(); rebuildCarga();
+    document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.toggle('active',x.dataset.v===S.abn));
     render();};
 }
 
+/* Reestructura ABN: si está activada, los placements de ABN_MEDIA se tratan
+   como implementados por el miembro virtual "ABN" (clona la fila, no muta RAW). */
+function applyAbn(rows){
+  if(S.abn!=='Sí') return rows;
+  return rows.map(r=>ABN_MEDIA.includes(key(r.media))?{...r,carga:ABN_MEMBER}:r);
+}
+
 function filtered(opts={}){
-  return RAW.filter(r=>
-    (S.abn==='__ALL__'||r.abn===S.abn)&&
+  return applyAbn(RAW).filter(r=>
     (!S.media.length||S.media.includes(r.media))&&
     (opts.carga===false||!S.carga.length||S.carga.includes(r.carga)));
 }
