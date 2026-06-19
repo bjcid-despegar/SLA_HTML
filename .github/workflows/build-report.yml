@@ -7,6 +7,7 @@ on:
     paths:
       - 'modelo_base_camp.csv'
       - 'plantilla_reporte.html'
+      - 'plantilla_reporte_managers.html'
       - 'build_report.py'
       - '.github/workflows/build-report.yml'
   workflow_dispatch:   # permite publicarlo a mano desde la pestaña Actions
@@ -47,4 +48,3 @@ jobs:
       - name: Desplegar a GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
