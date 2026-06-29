@@ -1,11 +1,12 @@
 name: Publicar reporte en GitHub Pages
 
-# Se ejecuta cuando cambia el CSV, la plantilla o el script de build.
+# Se ejecuta cuando cambian los CSV, las plantillas o el script de build.
 on:
   push:
     branches: [main]
     paths:
       - 'modelo_base_camp.csv'
+      - 'modelo_base_camp_ctr.csv'
       - 'plantilla_reporte.html'
       - 'plantilla_reporte_managers.html'
       - 'build_report.py'
