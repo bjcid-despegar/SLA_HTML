@@ -109,6 +109,14 @@ table.pivot td.val:hover{outline:2px solid var(--brand-500);outline-offset:-2px}
 table.pivot td.empty{color:#c9c4d6;background:#fcfcfe}
 table.pivot td.prom{font-weight:700;border-left:2px solid var(--brand-300)}
 table.pivot tr.grp-end td{border-bottom:2px solid var(--brand-300)}
+table.pivot tr.prom-head td{cursor:pointer;background:#efe9fb;color:var(--brand-700);font-weight:800;
+  text-align:left;border-top:2px solid var(--brand-500);user-select:none}
+table.pivot tr.prom-head td:hover{background:#e6def8}
+table.pivot tr.prom-head .prom-arrow{display:inline-block;width:14px;color:var(--brand-500)}
+table.pivot tr.prom-row td{background:#f6f3fd;color:var(--brand-700);font-weight:700}
+table.pivot tr.prom-row td.dim{text-align:left;background:#f6f3fd}
+table.pivot tr.prom-hdr td{background:var(--brand-700);color:#fff;font-weight:600;text-align:center}
+table.pivot tr.prom-hdr td.dim{text-align:left;background:var(--brand-700);color:#fff}
 .note{font-size:11.5px;color:var(--muted);margin:10px 2px 0;line-height:1.5}
 .chart-box{position:relative;height:330px}
 
@@ -176,13 +184,21 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
 
   <div id="loader" style="display:none">
     <h3>Leyendo datos…</h3>
-    <p>Buscando <b>modelo_base_camp.csv</b> en esta carpeta. Si tu navegador bloquea la lectura automática,
-       seleccioná el archivo a mano (los umbrales de SLA ya están incrustados, no hace falta cargarlos):</p>
+    <p>Buscando <b>modelo_base_camp.csv</b> y <b>modelo_base_camp_ctr.csv</b> en esta carpeta. Si tu navegador
+       bloquea la lectura automática, seleccioná los archivos a mano (los umbrales de SLA ya están incrustados,
+       no hace falta cargarlos):</p>
     <div class="drop">
       <label>
         <b>📄 Cargar modelo_base_camp.csv <span id="ok1"></span></b>
-        <small>Base de placements · un registro por placement</small>
+        <small>Base de SLA / conteos · un registro por placement</small>
         <input type="file" id="file1" accept=".csv">
+      </label>
+    </div>
+    <div class="drop" style="margin-top:10px">
+      <label>
+        <b>📄 Cargar modelo_base_camp_ctr.csv <span id="ok2"></span></b>
+        <small>Base de CTR · un registro por placement-mes (primera_imp_mes)</small>
+        <input type="file" id="file2" accept=".csv">
       </label>
     </div>
   </div>
@@ -252,7 +268,7 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
       </div>
     </div>
 
-    <div class="foot">Reporte generado automáticamente desde <b>modelo_base_camp.csv</b></div>
+    <div class="foot">Reporte generado automáticamente · SLA y conteos desde <b>modelo_base_camp.csv</b> · CTR desde <b>modelo_base_camp_ctr.csv</b></div>
   </div>
 </div>
 
@@ -272,14 +288,20 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
 
 <div class="toast" id="toast"></div>
 
-<!-- Datos incrustados: contenido de modelo_base_camp.csv -->
+<!-- Datos incrustados: contenido de modelo_base_camp.csv (base de SLA / conteos, un registro por placement) -->
 <script id="csvData" type="text/csv">__CSV_PLACEHOLDER__</script>
+<!-- Datos incrustados: contenido de modelo_base_camp_ctr.csv (base de CTR, un registro por placement-mes) -->
+<script id="csvDataCtr" type="text/csv">__CSV_CTR_PLACEHOLDER__</script>
 
 <script>
 const FILE_MAIN='modelo_base_camp.csv';
+const FILE_CTR='modelo_base_camp_ctr.csv';
 const MES=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const MODEL_ORDER=['Black','Premium','Business','Economy'];
+/* Base de SLA / conteos: un registro por placement (primera impresión) */
 const REQ=['ms_campaign_id','media','modelo','mes','anio','sla_ok','ctr','abn'];
+/* Base de CTR: un registro por placement-mes; primera_imp_mes = nº de mes implementado */
+const REQ_CTR=['ms_campaign_id','media','modelo','primera_imp_mes','anio','clicks','shows','abn'];
 
 /* Umbrales de SLA (días) incrustados — SLA.csv */
 const SLA={
@@ -289,12 +311,20 @@ const SLA={
   'drapper_banner':    {Black:4,Premium:3,Business:2,Economy:2}
 };
 
-let RAW=[], chart=null, chart2=null, slaMetric='dias';
+let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
 let modalRows=[], modalName='detalle';
 const S={media:[]};   // media: [] = todos
 const drill={};
+const promOpen={sla:false,ctr:false};   // pestaña "Promedios" (filas por miembro) colapsada por defecto
 
 const norm=s=>(s==null?'':String(s)).trim();
+/* Clave única de placement (campaña+media+país+marca). En la base de CTR un mismo
+   placement aparece en varias filas, una por mes implementado (primera_imp_mes). */
+const placementKey=r=>[r.ms_campaign_id,r.media,r.pais,r.marca].join('|');
+const countPlacements=rows=>new Set(rows.map(placementKey)).size;
+/* Mes de la base de CTR: primera_imp_mes es el nº de mes (1-12). El CTR se agrupa
+   por este campo para ver la evolución mes a mes de cada placement. */
+function firstImpMonth(r){const n=parseInt(r.primera_imp_mes,10);return isNaN(n)?null:n;}
 const numOrNull=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?null:x;};
 /* Conteos enteros (clicks, shows): elimina separadores de miles (, . ó espacio) antes de parsear */
 const numCount=v=>{const s=String(v==null?'':v).replace(/[^\d-]/g,'');return s===''?null:parseInt(s,10);};
@@ -313,39 +343,49 @@ function toast(msg,isErr){
 
 /* ---------- carga ---------- */
 window.addEventListener('DOMContentLoaded',init);
-document.getElementById('file1').addEventListener('change',e=>{
-  const f=e.target.files[0]; if(!f)return;
-  const r=new FileReader();
-  r.onload=()=>{try{parseMain(r.result);
-      document.getElementById('ok1').innerHTML='<span class="tag-ok">✓</span>'; finishLoad();
-      toast('Datos actualizados desde el archivo seleccionado');
-    }catch(err){showLoadError(err.message);}};
-  r.onerror=()=>showLoadError('No se pudo leer el archivo.');
-  r.readAsText(f,'utf-8');
-});
+function wireFile(inputId,okId,parseFn){
+  document.getElementById(inputId).addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{try{parseFn(r.result);
+        document.getElementById(okId).innerHTML='<span class="tag-ok">✓</span>'; finishLoad();
+        toast('Datos actualizados desde el archivo seleccionado');
+      }catch(err){showLoadError(err.message);}};
+    r.onerror=()=>showLoadError('No se pudo leer el archivo.');
+    r.readAsText(f,'utf-8');
+  });
+}
+wireFile('file1','ok1',parseMain);
+wireFile('file2','ok2',parseCtr);
 
-/* Arranque: usa los datos incrustados; si no hay, intenta leer el CSV de la carpeta */
+/* Devuelve el contenido del bloque embebido solo si trae datos reales
+   (no el marcador __..._PLACEHOLDER__ sin reemplazar). */
+function embedded(id,marker){
+  const el=document.getElementById(id), txt=el?el.textContent:'';
+  return (txt && txt.trim().length && txt.indexOf(marker)<0)?txt:'';
+}
+
+/* Arranque: usa los datos incrustados; si no hay, intenta leer los CSV de la carpeta */
 function init(){
-  const el=document.getElementById('csvData');
-  const txt=el?el.textContent:'';
-  if(txt && txt.trim().length){
-    try{ parseMain(txt); finishLoad(); return; }
-    catch(e){ /* si los datos incrustados fallan, caemos al modo lectura de archivo */ }
-  }
+  const main=embedded('csvData','__CSV_PLACEHOLDER__');
+  const ctr =embedded('csvDataCtr','__CSV_CTR_PLACEHOLDER__');
+  let ok=false;
+  if(main){ try{ parseMain(main); ok=true; }catch(e){} }
+  if(ctr){  try{ parseCtr(ctr); }catch(e){} }
+  if(ok){ finishLoad(); return; }
   autoLoad();
 }
 
 async function autoLoad(){
-  try{
-    const res=await fetch(FILE_MAIN,{cache:'no-store'});
-    if(!res.ok) throw new Error('no encontrado');
-    parseMain(await res.text());
-    finishLoad();
-  }catch(e){
-    document.getElementById('loader').style.display='block';
-    document.querySelector('#loader h3').textContent='Seleccioná modelo_base_camp.csv para ver el reporte';
-    document.getElementById('howto').style.display='flex';
-  }
+  let ok=false;
+  try{ const res=await fetch(FILE_MAIN,{cache:'no-store'});
+       if(res.ok){ parseMain(await res.text()); ok=true; } }catch(e){}
+  try{ const res=await fetch(FILE_CTR,{cache:'no-store'});
+       if(res.ok) parseCtr(await res.text()); }catch(e){}
+  if(ok){ finishLoad(); return; }
+  document.getElementById('loader').style.display='block';
+  document.querySelector('#loader h3').textContent='Seleccioná modelo_base_camp.csv y modelo_base_camp_ctr.csv para ver el reporte';
+  document.getElementById('howto').style.display='flex';
 }
 
 
@@ -368,30 +408,37 @@ function showLoadError(msg){
   document.querySelector('#loader p').innerHTML='⚠️ '+esc(msg);
 }
 
-function parseMain(text){
+/* Parser común a ambas bases: Papa.parse + validación de columnas + limpieza +
+   exclusión de 2025. La base de SLA no trae primera_imp_mes (queda ''); la de
+   CTR sí (nº de mes implementado). */
+function parseCsv(text,req){
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   const out=Papa.parse(text,{header:true,skipEmptyLines:true,
     delimitersToGuess:[',',';','\t','|'],transformHeader:h=>h.trim()});
   const rows=out.data.filter(r=>Object.keys(r).length>1);
   if(!rows.length) throw new Error('No se reconocieron filas. ¿El separador del CSV es , ; o tabulación?');
   const cols=Object.keys(rows[0]);
-  const missing=REQ.filter(c=>!cols.includes(c));
+  const missing=req.filter(c=>!cols.includes(c));
   if(missing.length) throw new Error('Faltan columnas ('+missing.join(', ')+'). Columnas detectadas: '+cols.join(', '));
   const clean=rows.map(r=>({
     ms_campaign_id:norm(r.ms_campaign_id),nombre:norm(r.nombre),partner_ms:norm(r.partner_ms),
     partner_ok:norm(r.partner_ok),ms_product:norm(r.ms_product),media:norm(r.media),pais:norm(r.pais),
     clicks:norm(r.clicks),shows:norm(r.shows),ctr:numOrNull(r.ctr),fecha_negociada:norm(r.fecha_negociada),
     fecha_implementacion:norm(r.fecha_implementacion),anio:norm(r.anio),mes:parseInt(r.mes,10),
-    semana:norm(r.semana),primera_impresion:norm(r.primera_impresion),sla:numOrNull(r.sla),
+    semana:norm(r.semana),primera_impresion:norm(r.primera_impresion),primera_imp_mes:norm(r.primera_imp_mes),sla:numOrNull(r.sla),
     fecha_inicio_campania:norm(r.fecha_inicio_campania),fecha_fin_campania:norm(r.fecha_fin_campania),monto:norm(r.monto),modelo:norm(r.modelo),
     estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok)
   }));
   const yr=r=>{const s=r.anio+' '+r.fecha_implementacion+' '+r.fecha_negociada;
     const m=s.match(/\b(20\d{2})\b/);return m?m[1]:'';};
-  window.__years=[...new Set(clean.map(yr))].filter(Boolean).sort();
-  window.__readCount=clean.length;
-  RAW=clean.filter(r=>yr(r)!=='2025');
+  return {rows:clean.filter(r=>yr(r)!=='2025'),
+          years:[...new Set(clean.map(yr))].filter(Boolean).sort(), read:clean.length};
 }
+function parseMain(text){
+  const o=parseCsv(text,REQ);
+  window.__years=o.years; window.__readCount=o.read; RAW=o.rows;
+}
+function parseCtr(text){ RAW_CTR=parseCsv(text,REQ_CTR).rows; }
 
 /* ---------- arranque ---------- */
 function boot(){
@@ -439,17 +486,17 @@ function buildFilters(){
     S.media=[]; mmCtl.reset(); render();};
 }
 
-function filtered(){
-  return RAW.filter(r=> !S.media.length||S.media.includes(r.media));
-}
+function filtered(){     return RAW.filter(r=> !S.media.length||S.media.includes(r.media)); }      // base de SLA / conteos
+function filteredCtr(){  return RAW_CTR.filter(r=> !S.media.length||S.media.includes(r.media)); }  // base de CTR (placement-mes)
 
 function render(){
-  const rows=filtered();
-  renderCards(rows);
+  const rows=filtered();        // modelo_base_camp.csv     → SLA, campañas, placements
+  const ctrRows=filteredCtr();  // modelo_base_camp_ctr.csv → CTR (por primera_imp_mes)
+  renderCards(rows,ctrRows);
   renderBar(rows);
-  renderActiveBar(rows);
+  renderActiveBar(rows,ctrRows);
   renderPivot('sla',rows);
-  renderPivot('ctr',rows);
+  renderPivot('ctr',ctrRows);
   document.getElementById('lg-lo').style.background=heat(0);
   document.getElementById('lg-hi').style.background=heat(1);
 }
@@ -457,24 +504,28 @@ function render(){
 const fmtPct=(x,d=1)=>x==null?'–':(x*100).toFixed(d)+'%';
 const fmtCtr=x=>x==null?'–':x.toFixed(2);
 
-function renderCards(rows){
+function renderCards(rows,ctrRows){
+  /* Campañas, placements y SLA salen de modelo_base_camp.csv (rows). */
   const camps=new Set(rows.map(r=>r.ms_campaign_id).filter(Boolean)).size;
+  const places=countPlacements(rows);
   const slaProm=mean(rows.map(r=>r.sla).filter(v=>v!=null));
   const ok=rows.map(r=>r.sla_ok).filter(v=>v!=null);
   const slaRatio=mean(ok);
-  /* CTR global: misma fórmula que la tabla — Σclicks/Σshows×100, con numCount
-     para descartar separadores de miles. No es un promedio de promedios. */
+  /* CTR global: sale de modelo_base_camp_ctr.csv (ctrRows), sumando todas las
+     filas placement-mes. Σclicks/Σshows×100 con numCount para descartar
+     separadores de miles. No es un promedio de promedios. */
   let ctrCs=0,ctrSs=0;
-  rows.forEach(r=>{const c=numCount(r.clicks),s=numCount(r.shows);
+  ctrRows.forEach(r=>{const c=numCount(r.clicks),s=numCount(r.shows);
     if(c!=null&&s!=null){ctrCs+=c;ctrSs+=s;}});
   const ctrProm=ctrSs>0?ctrCs/ctrSs*100:null;
+  const ctrPlaces=countPlacements(ctrRows);
   const single=(k,v,s,c)=>`<div class="card" style="border-top-color:${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   document.getElementById('cards').innerHTML=
     single('Campañas',camps.toLocaleString('es-MX'),'IDs únicos de campaña','var(--brand-500)')+
-    single('Placements',rows.length.toLocaleString('es-MX'),'registros totales','var(--brand-600)')+
+    single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
     single('SLA promedio',slaProm==null?'–':slaProm.toFixed(1),'días · valor medio del campo sla','var(--brand-700)')+
     single('SLA ratio',fmtPct(slaRatio),ok.length+' casos (% cumplimiento)','var(--orange)')+
-    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%',rows.length+' placements','var(--teal)');
+    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%',ctrPlaces+' placements','var(--teal)');
 }
 
 function implMonth(r){
@@ -552,25 +603,36 @@ function renderBar(rows){
 }
 
 const isActive=r=>String(r.estado||'').trim().toLowerCase()==='active';
-function renderActiveBar(rows){
-  const act=rows.filter(isActive);
-  /* Total de campañas activas del equipo por mes (sin desglose por miembro) */
+/* Barras = campañas activas por su MES DE INICIO, desde modelo_base_camp.csv (rows):
+   da visibilidad de en qué mes arrancó cada campaña y cuáles siguen activas. La
+   línea de tendencia del CTR viene de modelo_base_camp_ctr.csv (ctrRows), asociando
+   primera_imp_mes al mes del gráfico. */
+function renderActiveBar(rows,ctrRows){
+  const act=rows.filter(isActive);         // base de SLA/conteos → barras: campañas activas por mes de inicio
+  /* Total de campañas activas del equipo por mes de inicio (sin desglose por miembro) */
   const byMonth={};
   act.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
     (byMonth[mo]=byMonth[mo]||new Set()).add(r.ms_campaign_id);});
-  const months=[...new Set(act.map(implMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
+  /* Eje X: rango CONTIGUO de meses (del mínimo al máximo presente entre meses de
+     inicio de las barras y meses de primera_imp_mes del CTR). Así cada casilla del
+     gráfico corresponde a su número de mes de calendario (1=Ene, 2=Feb, …) y el CTR
+     de cada primera_imp_mes cae siempre en su mes, sin que un mes vacío desplace al resto. */
+  const present=[...act.map(implMonth),...ctrRows.map(firstImpMonth)].filter(m=>m!=null);
+  const months=present.length?Array.from({length:Math.max(...present)-Math.min(...present)+1},(_,i)=>Math.min(...present)+i):[];
   const cnt=mo=>(byMonth[mo]?byMonth[mo].size:0);
   const datasets=[{label:'Campañas activas',
     data:months.map(mo=>cnt(mo)),
     backgroundColor:PALETTE[0],borderRadius:4,maxBarThickness:46}];
 
-  /* CTR promedio por mes (solo campañas activas) — línea de tendencia, eje derecho.
-     Se calcula igual que la tabla: suma(clicks)/suma(shows)*100, usando numCount
-     para descartar separadores de miles (, . ó espacio) y no inflar los valores. */
+  /* CTR por mes — línea de tendencia, eje derecho, desde la base de CTR agrupando por
+     primera_imp_mes. Σclicks/Σshows×100 sobre TODAS las filas del corte (activas y
+     cerradas), idéntico a la tarjeta y a la tabla de CTR; NO se restringe a activas
+     para que los valores coincidan al filtrar por carga/mes. numCount descarta los
+     separadores de miles. No es promedio de promedios. */
   const ctrMonth={};
   const accum=o=>{o.cs=o.cs||0;o.ss=o.ss||0;return o;};
   const ctrPct=o=>(o&&o.ss>0)?o.cs/o.ss*100:null;
-  act.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
+  ctrRows.forEach(r=>{const mo=firstImpMonth(r); if(mo==null)return;
     const c=numCount(r.clicks),s=numCount(r.shows); if(c==null||s==null)return;
     const m=accum(ctrMonth[mo]=ctrMonth[mo]||{});m.cs+=c;m.ss+=s;});
   datasets.push({type:'line',label:'CTR promedio',isCtr:true,yAxisID:'y1',
@@ -627,9 +689,11 @@ function cellVal(kind,arr){
   return mean(arr.map(r=>r.sla_ok).filter(v=>v!=null));
 }
 
-/* Pivot sin la dimensión "Carga": agrupa por Modelo › Media (resultado del equipo) */
+/* Pivot sin la dimensión "Carga": agrupa por Modelo › Media (resultado del equipo).
+   CTR se agrupa por mes de primera_imp_mes (base de CTR); SLA por mes de implementación. */
 function renderPivot(kind,rows){
-  const months=[...new Set(rows.map(r=>r.mes).filter(m=>!isNaN(m)))].sort((a,b)=>a-b);
+  const moOf=kind==='ctr'?firstImpMonth:(r=>r.mes);
+  const months=[...new Set(rows.map(moOf).filter(m=>m!=null&&!isNaN(m)))].sort((a,b)=>a-b);
   const tree={};
   rows.forEach(r=>{const md=r.modelo||'(sin modelo)',me=r.media||'(sin media)';
     tree[md]=tree[md]||{};(tree[md][me]=tree[md][me]||[]).push(r);});
@@ -638,7 +702,7 @@ function renderPivot(kind,rows){
 
   let lo=Infinity,hi=-Infinity;
   if(kind==='ctr'){models.forEach(md=>Object.keys(tree[md]).forEach(me=>{
-    months.forEach(mo=>{const v=cellVal('ctr',tree[md][me].filter(r=>r.mes===mo));if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}});
+    months.forEach(mo=>{const v=cellVal('ctr',tree[md][me].filter(r=>moOf(r)===mo));if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}});
     const v=cellVal('ctr',tree[md][me]);if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}}));
     if(lo===Infinity){lo=0;hi=1;}}
 
@@ -652,15 +716,53 @@ function renderPivot(kind,rows){
       html+='<tr'+(idx===medias.length-1?' class="grp-end"':'')+'>';
       if(firstM){html+=`<td class="dim" rowspan="${medias.length}">${esc(md)}</td>`;firstM=false;}
       html+=`<td class="dim media">${esc(me)}</td>`;
-      months.forEach(mo=>{const arr=tree[md][me].filter(r=>r.mes===mo);
+      months.forEach(mo=>{const arr=tree[md][me].filter(r=>moOf(r)===mo);
         html+=cellHTML(kind,arr,md,me,mo,lo,hi,false);});
       html+=cellHTML(kind,tree[md][me],md,me,'ALL',lo,hi,true);
       html+='</tr>';
     });
   });
+  html+=memberRows(kind,rows,moOf,months,2);
   html+='</tbody>';
   document.getElementById(kind==='sla'?'slaTable':'ctrTable').innerHTML=html;
   if(kind==='sla') updateSlaText();
+}
+
+/* Filas finales por MIEMBRO de AdOps (campo carga): para cada carga, el promedio de
+   TODAS sus filas por mes, con el mismo origen y fórmula que las celdas
+   (SLA = media de sla/sla_ok sobre modelo_base_camp.csv; CTR = Σclicks/Σshows sobre
+   modelo_base_camp_ctr.csv). No es promedio de promedios: reagrega sobre las filas. */
+function memberRows(kind,rows,moOf,months,dimCols){
+  const cargas=[...new Set(rows.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const cell=(arr,ca,mo)=>{
+    const k=`${kind}|${ca}|—|${mo}`; drill[k]=arr;
+    const v=cellVal(kind,arr);
+    if(v==null||!arr.length) return `<td class="val prom" data-k="${k}">–</td>`;
+    const txt=kind==='ctr'?fmtCtr(v):(slaMetric==='dias'?v.toFixed(1):fmtPct(v));
+    return `<td class="val prom" data-k="${k}">${txt}</td>`;
+  };
+  const open=promOpen[kind], totalCols=dimCols+months.length+1;
+  /* Pestaña desplegable "Promedios": una fila por miembro (carga), oculta/visible */
+  let h='<tr class="prom-head" onclick="togglePromos(\''+kind+'\')"><td colspan="'+totalCols+'">'+
+        '<span class="prom-arrow">'+(open?'▾':'▸')+'</span> Promedios</td></tr>';
+  /* Repite los encabezados de mes dentro del bloque desplegable (no perder la referencia) */
+  h+='<tr class="prom-row prom-hdr" style="display:'+(open?'':'none')+'"><td class="dim" colspan="'+dimCols+'">Miembro</td>'+
+     months.map(m=>'<td>'+(MES[m]||m)+'</td>').join('')+'<td>Prom.</td></tr>';
+  cargas.forEach(ca=>{
+    const cr=rows.filter(r=>r.carga===ca);
+    h+='<tr class="prom-row" style="display:'+(open?'':'none')+'"><td class="dim" colspan="'+dimCols+'">'+esc(ca)+'</td>';
+    months.forEach(mo=>{h+=cell(cr.filter(r=>moOf(r)===mo),ca,mo);});
+    h+=cell(cr,ca,'ALL');
+    h+='</tr>';
+  });
+  return h;
+}
+/* Muestra/oculta las filas de "Promedios" de una tabla y gira la flecha */
+function togglePromos(kind){
+  promOpen[kind]=!promOpen[kind];
+  const tbl=document.getElementById(kind==='sla'?'slaTable':'ctrTable');
+  tbl.querySelectorAll('tr.prom-row').forEach(tr=>tr.style.display=promOpen[kind]?'':'none');
+  const ar=tbl.querySelector('.prom-arrow'); if(ar) ar.textContent=promOpen[kind]?'▾':'▸';
 }
 
 function cellHTML(kind,arr,md,me,mo,lo,hi,isProm){
@@ -709,7 +811,7 @@ function updateSlaText(){
   openModal(td.dataset.k,arr);}));
 
 const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','abn',
-  'mes','semana','clicks','shows','ctr','sla','sla_ok','estado','fecha_implementacion','primera_impresion','fecha_inicio_campania','fecha_fin_campania','monto'];
+  'mes','semana','clicks','shows','ctr','sla','sla_ok','estado','fecha_implementacion','primera_impresion','primera_imp_mes','fecha_inicio_campania','fecha_fin_campania','monto'];
 
 function openModal(k,arr){
   const [kind,md,me,mo]=k.split('|');
