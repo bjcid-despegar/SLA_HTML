@@ -52,10 +52,19 @@ def main() -> None:
         tpl = tpl_path.read_text(encoding="utf-8")
         if MARKER not in tpl:
             sys.exit(f"ERROR: no se encontró el marcador {MARKER} en {template}")
-        out = tpl.replace(MARKER, csv)
+        # Reemplazamos SOLO el placeholder que está dentro del bloque
+        # <script type="text/csv">...</script> (anclado por los caracteres > y <
+        # que lo rodean). El mismo texto aparece como literal de detección dentro
+        # del JS —embedded('csvData','__CSV_PLACEHOLDER__')—; ahí NO debe tocarse,
+        # porque volcar el CSV en ese string rompería el JavaScript.
+        data_marker = ">" + MARKER + "<"
+        if data_marker not in tpl:
+            sys.exit(f"ERROR: no se encontró el bloque de datos {data_marker} en {template}")
+        out = tpl.replace(data_marker, ">" + csv + "<", 1)
         # El marcador de CTR es opcional (plantillas viejas pueden no tenerlo).
-        if MARKER_CTR in out:
-            out = out.replace(MARKER_CTR, csv_ctr)
+        data_marker_ctr = ">" + MARKER_CTR + "<"
+        if data_marker_ctr in out:
+            out = out.replace(data_marker_ctr, ">" + csv_ctr + "<", 1)
         for name in names:
             # UTF-8 sin BOM, sin traducir saltos de línea
             (SITE_DIR / name).write_text(out, encoding="utf-8", newline="")
