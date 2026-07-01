@@ -216,6 +216,16 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
           </div>
         </div>
       </div>
+      <div class="ctl">
+        <label>Filtro · Vertical</label>
+        <div class="ms" id="msVertical">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
       <div class="spacer"></div>
       <div class="ctl">
         <label>&nbsp;</label>
@@ -313,9 +323,8 @@ const SLA={
 
 let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
 let modalRows=[], modalName='detalle';
-const S={media:[]};   // media: [] = todos
+const S={media:[],vertical:[]};   // media/vertical: [] = todos
 const drill={};
-const promOpen={sla:false,ctr:false};   // pestaña "Promedios" (filas por miembro) colapsada por defecto
 
 const norm=s=>(s==null?'':String(s)).trim();
 /* Clave única de placement (campaña+media+país+marca). En la base de CTR un mismo
@@ -474,20 +483,24 @@ function makeMulti(root,values,onChange){
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
-let mmCtl=null;
+let mmCtl=null, mvCtl=null;
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.media=[];
+  const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  S.media=[];S.vertical=[];
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
+  mvCtl=makeMulti(document.getElementById('msVertical'),verticals,a=>{S.vertical=a;render();});
   document.querySelectorAll('#slaSeg button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#slaSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[]; mmCtl.reset(); render();};
+    S.media=[];S.vertical=[]; mmCtl.reset(); mvCtl.reset(); render();};
 }
 
-function filtered(){     return RAW.filter(r=> !S.media.length||S.media.includes(r.media)); }      // base de SLA / conteos
-function filteredCtr(){  return RAW_CTR.filter(r=> !S.media.length||S.media.includes(r.media)); }  // base de CTR (placement-mes)
+function match(r){ return (!S.media.length||S.media.includes(r.media))&&
+  (!S.vertical.length||S.vertical.includes(r.ms_product)); }
+function filtered(){     return RAW.filter(match); }      // base de SLA / conteos
+function filteredCtr(){  return RAW_CTR.filter(match); }  // base de CTR (placement-mes)
 
 function render(){
   const rows=filtered();        // modelo_base_camp.csv     → SLA, campañas, placements
@@ -722,47 +735,9 @@ function renderPivot(kind,rows){
       html+='</tr>';
     });
   });
-  html+=memberRows(kind,rows,moOf,months,2);
   html+='</tbody>';
   document.getElementById(kind==='sla'?'slaTable':'ctrTable').innerHTML=html;
   if(kind==='sla') updateSlaText();
-}
-
-/* Filas finales por MIEMBRO de AdOps (campo carga): para cada carga, el promedio de
-   TODAS sus filas por mes, con el mismo origen y fórmula que las celdas
-   (SLA = media de sla/sla_ok sobre modelo_base_camp.csv; CTR = Σclicks/Σshows sobre
-   modelo_base_camp_ctr.csv). No es promedio de promedios: reagrega sobre las filas. */
-function memberRows(kind,rows,moOf,months,dimCols){
-  const cargas=[...new Set(rows.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const cell=(arr,ca,mo)=>{
-    const k=`${kind}|${ca}|—|${mo}`; drill[k]=arr;
-    const v=cellVal(kind,arr);
-    if(v==null||!arr.length) return `<td class="val prom" data-k="${k}">–</td>`;
-    const txt=kind==='ctr'?fmtCtr(v):(slaMetric==='dias'?v.toFixed(1):fmtPct(v));
-    return `<td class="val prom" data-k="${k}">${txt}</td>`;
-  };
-  const open=promOpen[kind], totalCols=dimCols+months.length+1;
-  /* Pestaña desplegable "Promedios": una fila por miembro (carga), oculta/visible */
-  let h='<tr class="prom-head" onclick="togglePromos(\''+kind+'\')"><td colspan="'+totalCols+'">'+
-        '<span class="prom-arrow">'+(open?'▾':'▸')+'</span> Promedios</td></tr>';
-  /* Repite los encabezados de mes dentro del bloque desplegable (no perder la referencia) */
-  h+='<tr class="prom-row prom-hdr" style="display:'+(open?'':'none')+'"><td class="dim" colspan="'+dimCols+'">Miembro</td>'+
-     months.map(m=>'<td>'+(MES[m]||m)+'</td>').join('')+'<td>Prom.</td></tr>';
-  cargas.forEach(ca=>{
-    const cr=rows.filter(r=>r.carga===ca);
-    h+='<tr class="prom-row" style="display:'+(open?'':'none')+'"><td class="dim" colspan="'+dimCols+'">'+esc(ca)+'</td>';
-    months.forEach(mo=>{h+=cell(cr.filter(r=>moOf(r)===mo),ca,mo);});
-    h+=cell(cr,ca,'ALL');
-    h+='</tr>';
-  });
-  return h;
-}
-/* Muestra/oculta las filas de "Promedios" de una tabla y gira la flecha */
-function togglePromos(kind){
-  promOpen[kind]=!promOpen[kind];
-  const tbl=document.getElementById(kind==='sla'?'slaTable':'ctrTable');
-  tbl.querySelectorAll('tr.prom-row').forEach(tr=>tr.style.display=promOpen[kind]?'':'none');
-  const ar=tbl.querySelector('.prom-arrow'); if(ar) ar.textContent=promOpen[kind]?'▾':'▸';
 }
 
 function cellHTML(kind,arr,md,me,mo,lo,hi,isProm){
