@@ -440,7 +440,8 @@ function parseCsv(text,req){
   }));
   const yr=r=>{const s=r.anio+' '+r.fecha_implementacion+' '+r.fecha_negociada;
     const m=s.match(/\b(20\d{2})\b/);return m?m[1]:'';};
-  return {rows:clean.filter(r=>yr(r)!=='2025'),
+  const finOk=r=>{const m=(r.fecha_fin_campania||'').match(/\b(20\d{2})\b/);return !m||parseInt(m[1])>=2026;};
+  return {rows:clean.filter(r=>yr(r)!=='2025'&&finOk(r)),
           years:[...new Set(clean.map(yr))].filter(Boolean).sort(), read:clean.length};
 }
 function parseMain(text){
