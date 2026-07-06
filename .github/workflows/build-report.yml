@@ -8,7 +8,8 @@ on:
       - 'modelo_base_camp.csv'
       - 'modelo_base_camp_ctr.csv'
       - 'plantilla_reporte.html'
-      - 'plantilla_reporte_managers.html'
+      - 'plantilla_reporte_ctr.html'
+      - 'plantilla_reporte_sla.html'
       - 'build_report.py'
       - '.github/workflows/build-report.yml'
   workflow_dispatch:   # permite publicarlo a mano desde la pestaña Actions
