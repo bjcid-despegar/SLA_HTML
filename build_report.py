@@ -18,12 +18,16 @@ SITE_DIR = pathlib.Path("_site")
 
 # (plantilla, [nombres de salida]).
 #  - base: vista completa con segmentación por carga (miembro del equipo).
-#  - managers: misma estructura sin la segmentación por carga (resultado general).
+#  - ctr:  resultado general del equipo, solo métricas de CTR.
+#  - sla:  resultado general del equipo, solo métricas de SLA.
+#  - managers: DESACTIVADA — reemplazada por plantilla_reporte_ctr y plantilla_reporte_sla.
 BUILDS = [
     ("plantilla_reporte.html",
      ["index.html", "reporte_camp_base_standalone.html"]),
-    ("plantilla_reporte_managers.html",
-     ["reporte_camp_managers_standalone.html"]),
+    ("plantilla_reporte_ctr.html",
+     ["reporte_camp_ctr_standalone.html"]),
+    ("plantilla_reporte_sla.html",
+     ["reporte_camp_sla_standalone.html"]),
 ]
 
 
