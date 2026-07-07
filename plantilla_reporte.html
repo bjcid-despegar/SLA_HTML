@@ -12,6 +12,7 @@
   --teal:#0d9488; --orange:#f97316; --ink:#1e1b2e; --muted:#6b7280;
   --line:#e7e3f2; --bg:#f4f2fa; --card:#ffffff;
   --ok-bg:#cdeed6; --ok-tx:#15803d; --bad-bg:#fbdada; --bad-tx:#b91c1c;
+  --warn-bg:#fef9c3; --warn-tx:#854d0e;
   --shadow:0 1px 3px rgba(42,10,82,.08),0 6px 18px rgba(42,10,82,.06);
 }
 *{box-sizing:border-box}
@@ -374,7 +375,7 @@ const SLA={
 };
 
 let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
-let modalRows=[], modalName='detalle';
+let modalRows=[], modalCols=[], modalName='detalle';
 const S={carga:[],media:[],vertical:[],abn:'No'};   // carga/media/vertical: [] = todos · abn: 'No' = sin reestructura
 const drill={};
 const promOpen={sla:false,ctr:false};   // pestaña "Promedios" (filas por miembro) colapsada por defecto
@@ -841,6 +842,27 @@ function complianceColor(v){
   const t=Math.max(0,Math.min(1,v))*2,i=t<1?0:1,f=t-i,c=stops[i].map((x,k)=>Math.round(x+(stops[i+1][k]-x)*f));
   return `rgb(${c.join(',')})`;}
 
+function slaTrafficLight(cellRows,model){
+  const W='background:var(--warn-bg);color:var(--warn-tx);font-weight:700';
+  const G='background:var(--ok-bg);color:var(--ok-tx);font-weight:700';
+  const R='background:var(--bad-bg);color:var(--bad-tx);font-weight:700';
+  const all=cellRows.map(r=>r.sla_ok);
+  const vals=all.filter(v=>v!=null);
+  if(model && key(model)==='hubspot'){
+    // Celda específica de hubspot: cualquier null es ambiguo
+    if(all.some(v=>v==null)) return W;
+    if(vals.every(v=>v===1)) return G;
+    if(vals.every(v=>v===0)) return R;
+  }
+  // Agregado (Promedios): si alguna fila hubspot tiene sla_ok null → amarillo
+  if(!model && cellRows.some(r=>key(r.modelo||'')==='hubspot' && r.sla_ok==null)) return W;
+  if(!vals.length) return W;
+  const ratio=vals.reduce((a,b)=>a+b,0)/vals.length;
+  if(ratio===1) return G;
+  if(ratio>=0.8) return W;
+  return R;
+}
+
 function cellVal(kind,arr){
   if(kind==='ctr'){
     let cs=0,ss=0;
@@ -910,6 +932,7 @@ function memberRows(kind,rows,moOf,months,dimCols){
     const v=cellVal(kind,arr);
     if(v==null||!cellRows.length) return `<td class="val prom" data-k="${k}">–</td>`;
     const txt=kind==='ctr'?fmtCtr(v):(slaMetric==='dias'?v.toFixed(1):fmtPct(v));
+    if(kind==='sla'){const s=slaTrafficLight(cellRows);return `<td class="val prom" data-k="${k}" style="${s}">${txt}</td>`;}
     return `<td class="val prom" data-k="${k}">${txt}</td>`;
   };
   const open=promOpen[kind], totalCols=dimCols+months.length+1;
@@ -949,32 +972,29 @@ function cellHTML(kind,arr,c,md,me,mo,lo,hi,isProm){
     const t=hi>lo?(v-lo)/(hi-lo):0.5,bg=heat(t),tx=t>0.55?'#fff':'#15302c';
     return `<td class="${cls}" data-k="${k}" style="background:${bg};color:${tx}" title="${cellRows.length} reg.">${fmtCtr(v)}</td>`;
   }
+  // SLA: semáforo verde/amarillo/rojo según % de sla_ok (100% / 80-99% / <80%)
+  const style=slaTrafficLight(cellRows,md);
+  let tip=cellRows.length+' reg.';
   if(slaMetric==='dias'){
-    const G='background:var(--ok-bg);color:var(--ok-tx);font-weight:700';
-    const R='background:var(--bad-bg);color:var(--bad-tx);font-weight:700';
     const um=(SLA[key(me)]||{})[matchModel(md)];
-    let style='', tip=cellRows.length+' reg.';
-    if(um!=null){ style = v<=um?G:R; tip+=' · umbral '+um; }
-    else if(key(md)==='hubspot'){ style = v<=2?G:(v>8?R:''); tip+=' · regla ≤2 / >8'; }
+    if(um!=null) tip+=' · umbral '+um;
     return `<td class="${cls}" data-k="${k}" style="${style}" title="${tip}">${v.toFixed(1)}</td>`;
   }
-  const bg=complianceColor(v);
-  return `<td class="${cls}" data-k="${k}" style="background:${bg};color:#1f2937;font-weight:700" title="${cellRows.length} reg.">${fmtPct(v)}</td>`;
+  return `<td class="${cls}" data-k="${k}" style="${style}" title="${tip}">${fmtPct(v)}</td>`;
 }
 
 function updateSlaText(){
   const lg=document.getElementById('slaLegend'),nt=document.getElementById('slaNote');
+  const shared=`<span class="chip"><span class="sw" style="background:var(--ok-bg)"></span> SLA Ratio (100%)</span>
+      <span class="chip"><span class="sw" style="background:var(--warn-bg);border-color:#fde68a"></span> SLA Ratio (80–99%)</span>
+      <span class="chip"><span class="sw" style="background:var(--bad-bg)"></span> SLA Ratio (&lt;80%)</span>
+      <span class="chip">↔ doble clic para ver registros</span>`;
   if(slaMetric==='dias'){
-    lg.innerHTML=`<span class="chip"><span class="sw" style="background:var(--ok-bg)"></span> ≤ umbral (verde)</span>
-      <span class="chip"><span class="sw" style="background:var(--bad-bg)"></span> &gt; umbral (rojo)</span>
-      <span class="chip">↔ doble clic para ver registros</span>`;
-    nt.innerHTML='Promedio del campo <b>sla</b> (días) comparado contra el umbral por media y modelo: verde si el promedio ≤ umbral, rojo si lo supera. Para el modelo <b>hubspot</b> (sin umbral propio) se usa: verde si ≤ 2, rojo si &gt; 8, sin pintar entremedio.';
+    lg.innerHTML=shared;
+    nt.innerHTML='Promedio del campo <b>sla</b> (días). El color refleja el cumplimiento: verde=100% de placements cumplieron el SLA, amarillo=80–99%, rojo=&lt;80%.';
   }else{
-    lg.innerHTML=`<span class="chip"><span class="sw" style="background:rgb(191,232,201)"></span> mayor cumplimiento</span>
-      <span class="chip"><span class="sw" style="background:rgb(253,233,169)"></span> medio</span>
-      <span class="chip"><span class="sw" style="background:rgb(247,197,197)"></span> menor cumplimiento</span>
-      <span class="chip">↔ doble clic para ver registros</span>`;
-    nt.innerHTML='Promedio de <b>sla_ok</b> (1 = cumplió, 0 = no; los nulos se omiten), como % de cumplimiento. Semáforo: verde = más cumplimiento.';
+    lg.innerHTML=shared;
+    nt.innerHTML='Promedio de <b>sla_ok</b> (1=cumplió, 0=no; los nulos se omiten) como % de cumplimiento. Verde=100%, amarillo=80–99%, rojo=&lt;80%.';
   }
 }
 
@@ -989,21 +1009,28 @@ const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media',
 
 function openModal(k,arr){
   const [kind,c,md,me,mo]=k.split('|');
-  modalRows=arr; modalName=`${kind}_${c}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
+  const cols=kind==='sla'?COLS.filter(col=>col!=='primera_imp_mes'):COLS;
+  modalRows=arr; modalCols=cols; modalName=`${kind}_${c}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
   document.getElementById('mTitle').textContent=
     `${kind.toUpperCase()} · ${c} › ${md} › ${me} · ${mo==='ALL'?'todos los meses':(MES[+mo]||mo)}`;
   document.getElementById('mCount').textContent=arr.length+' registro(s)';
-  let h='<thead><tr>'+COLS.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
-  arr.forEach(r=>{h+='<tr>'+COLS.map(col=>{let v=r[col];
-    if(col==='ctr')v=fmtCtr(r.ctr); if(col==='sla_ok')v=r.sla_ok==null?'null':r.sla_ok;
-    return `<td>${esc(v==null?'':v)}</td>`;}).join('')+'</tr>';});
+  let h='<thead><tr>'+cols.map(col=>`<th>${col}</th>`).join('')+'</tr></thead><tbody>';
+  arr.forEach(r=>{
+    let rowStyle='';
+    if(kind==='sla'){
+      if(r.sla_ok===1) rowStyle=' style="background:var(--ok-bg);color:var(--ok-tx)"';
+      else if(r.sla_ok===0) rowStyle=' style="background:var(--bad-bg);color:var(--bad-tx)"';
+    }
+    h+='<tr'+rowStyle+'>'+cols.map(col=>{let v=r[col];
+      if(col==='ctr')v=fmtCtr(r.ctr); if(col==='sla_ok')v=r.sla_ok==null?'null':r.sla_ok;
+      return `<td>${esc(v==null?'':v)}</td>`;}).join('')+'</tr>';});
   document.getElementById('rawTable').innerHTML=h+'</tbody>';
   document.getElementById('overlay').classList.add('open');
 }
 function closeModal(){document.getElementById('overlay').classList.remove('open');}
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
 function exportModal(){
-  const csv=Papa.unparse(modalRows.map(r=>{const o={};COLS.forEach(c=>o[c]=r[c]);return o;}));
+  const csv=Papa.unparse(modalRows.map(r=>{const o={};modalCols.forEach(c=>o[c]=r[c]);return o;}));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=modalName+'.csv';a.click();URL.revokeObjectURL(a.href);
 }
