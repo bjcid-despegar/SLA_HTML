@@ -600,7 +600,7 @@ document.getElementById('slaTable').addEventListener('dblclick',e=>{
   const arr=drill[td.dataset.k];if(!arr||!arr.length)return;
   openModal(td.dataset.k,arr);});
 
-const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','carga','abn',
+const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','abn',
   'mes','semana','sla','sla_ok','estado','fecha_implementacion','primera_impresion','fecha_inicio_campania','fecha_fin_campania','monto'];
 
 function openModal(k,arr){
