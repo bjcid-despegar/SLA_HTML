@@ -225,8 +225,8 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
       <div class="panel-h">
         <h2>SLA Promedio</h2>
         <div class="seg sm" id="slaSeg">
-          <button data-v="dias" class="active">SLA</button>
-          <button data-v="cumpl">SLA Ratio (%)</button>
+          <button data-v="dias">SLA</button>
+          <button data-v="cumpl" class="active">SLA Ratio (%)</button>
         </div>
       </div>
       <div class="panel-b">
@@ -272,7 +272,7 @@ const SLA={
   'drapper_banner':    {Black:4,Premium:3,Business:2,Economy:2}
 };
 
-let RAW=[], chart=null, slaMetric='dias';
+let RAW=[], chart=null, slaMetric='cumpl';
 let modalRows=[], modalName='detalle';
 const S={media:[],vertical:[]};
 const drill={};
