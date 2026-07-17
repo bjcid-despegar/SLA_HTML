@@ -285,13 +285,25 @@ body.locked{overflow:hidden}
     <div class="panel">
       <div class="panel-h">
         <h2>Campañas Asignadas - SLA Ratio</h2>
+        <span class="hint">↔ doble clic en una barra para ver registros</span>
       </div>
       <div class="panel-b"><div class="chart-box"><canvas id="barChart"></canvas></div></div>
     </div>
 
     <div class="panel">
       <div class="panel-h">
+        <h2>Implementación de Campañas por Mes</h2>
+        <span class="hint">↔ doble clic para ver registros</span>
+      </div>
+      <div class="panel-b">
+        <div class="tbl-scroll"><table class="pivot" id="campMonthTable"></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">
         <h2>Campañas Activas - CTR Promedio</h2>
+        <span class="hint">↔ doble clic en una barra para ver registros</span>
       </div>
       <div class="panel-b"><div class="chart-box"><canvas id="activeChart"></canvas></div></div>
     </div>
@@ -375,6 +387,7 @@ const SLA={
 };
 
 let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
+let barChartDrill={}, activeChartDrill={}, campMonthDrill={};
 let modalRows=[], modalCols=[], modalName='detalle';
 const S={carga:[],media:[],vertical:[],abn:'No'};   // carga/media/vertical: [] = todos · abn: 'No' = sin reestructura
 const drill={};
@@ -522,7 +535,7 @@ function parseCsv(text,req){
     ms_campaign_id:norm(r.ms_campaign_id),nombre:norm(r.nombre),partner_ms:norm(r.partner_ms),
     partner_ok:norm(r.partner_ok),ms_product:norm(r.ms_product),media:norm(r.media),pais:norm(r.pais),
     clicks:norm(r.clicks),shows:norm(r.shows),ctr:numOrNull(r.ctr),fecha_negociada:norm(r.fecha_negociada),
-    fecha_implementacion:norm(r.fecha_implementacion),anio:norm(r.anio),mes:parseInt(r.mes,10),
+    fecha_implementacion:norm(r.fecha_implementacion),anio:norm(r.anio),anio_evento:norm(r.anio_evento),mes:parseInt(r.mes,10),
     semana:norm(r.semana),primera_impresion:norm(r.primera_impresion),primera_imp_mes:norm(r.primera_imp_mes),sla:numOrNull(r.sla),
     fecha_inicio_campania:norm(r.fecha_inicio_campania),fecha_fin_campania:norm(r.fecha_fin_campania),monto:norm(r.monto),modelo:norm(r.modelo),
     estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok)
@@ -626,11 +639,59 @@ function render(){
   const ctrRows=filteredCtr();  // modelo_base_camp_ctr.csv → CTR (por primera_imp_mes)
   renderCards(rows,ctrRows);
   renderBar(rows);
+  renderCampMonth(ctrRows);
   renderActiveBar(rows,ctrRows);
   renderPivot('sla',rows);
   renderPivot('ctr',ctrRows);
   document.getElementById('lg-lo').style.background=heat(0);
   document.getElementById('lg-hi').style.background=heat(1);
+}
+
+const MONTHS_ES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+function campHeat(t){
+  t=Math.max(0,Math.min(1,t));
+  const a=[237,233,254],b=[91,33,182];
+  return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(',')})`;
+}
+function renderCampMonth(ctrRows){
+  const rows2026=ctrRows.filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
+  const months=[...new Set(rows2026.map(firstImpMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
+  const cargas=[...new Set(rows2026.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const tbl=document.getElementById('campMonthTable');
+  if(!months.length||!cargas.length){
+    tbl.innerHTML='<tbody><tr><td style="padding:16px;color:var(--muted)">Sin datos 2026 en la base CTR.</td></tr></tbody>';
+    return;
+  }
+  campMonthDrill={};
+  const byCarMo={};
+  rows2026.forEach(r=>{
+    const mo=firstImpMonth(r); if(mo==null||!r.carga||!r.ms_campaign_id)return;
+    const k=r.carga+'||'+mo;
+    byCarMo[r.carga]=byCarMo[r.carga]||{};
+    (byCarMo[r.carga][mo]=byCarMo[r.carga][mo]||new Set()).add(r.ms_campaign_id);
+    (campMonthDrill[k]=campMonthDrill[k]||[]).push(r);
+  });
+  let maxVal=0;
+  cargas.forEach(c=>months.forEach(mo=>{
+    const v=(byCarMo[c]&&byCarMo[c][mo])?byCarMo[c][mo].size:0;
+    if(v>maxVal)maxVal=v;
+  }));
+  let html=`<thead><tr><th class="dim" style="min-width:130px">AdOps</th>`+
+    months.map(m=>`<th>${MES[m]||m}</th>`).join('')+`</tr></thead><tbody>`;
+  cargas.forEach(c=>{
+    html+=`<tr><td class="dim" style="font-weight:600">${esc(c)}</td>`;
+    months.forEach(mo=>{
+      const set=(byCarMo[c]&&byCarMo[c][mo])||new Set();
+      const v=set.size, k=c+'||'+mo;
+      if(!v){html+=`<td class="val empty">–</td>`;return;}
+      const t=maxVal>0?v/maxVal:0;
+      const bg=campHeat(t),tx=t>0.55?'#fff':'var(--ink)';
+      html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  tbl.innerHTML=html;
 }
 
 const fmtPct=(x,d=1)=>x==null?'–':(x*100).toFixed(d)+'%';
@@ -705,6 +766,12 @@ function renderBar(rows){
     borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
     pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#1e1b2e',pointBorderColor:'#fff',pointBorderWidth:1,
     fill:false,tension:.3,spanGaps:true,order:0});
+  barChartDrill={};
+  members.forEach((mem,i)=>{
+    months.forEach((mo,j)=>{
+      barChartDrill[i+'|'+j]={title:'Campañas Asignadas · '+mem+' · '+(MES[mo]||mo),rows:rows.filter(r=>r.carga===mem&&implMonth(r)===mo)};
+    });
+  });
   if(chart)chart.destroy();
   const endLabel={id:'endLabel',afterDatasetsDraw(c){
     const di=c.data.datasets.findIndex(d=>d.type==='line'); if(di<0)return;
@@ -734,6 +801,7 @@ function renderBar(rows){
     type:'bar',
     data:{labels:months.map(m=>MES[m]||m),datasets},
     options:{responsive:true,maintainAspectRatio:false,
+      onHover:(event,elements)=>{if(event.native){const hasBar=elements.some(el=>chart&&chart.data.datasets[el.datasetIndex].type!=='line');event.native.target.style.cursor=hasBar?'pointer':'default';}},
       layout:{padding:{top:18}},
       plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true,pointStyle:'rectRounded'}},
         tooltip:{callbacks:{
@@ -797,6 +865,12 @@ function renderActiveBar(rows,ctrRows){
     borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
     pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#1e1b2e',pointBorderColor:'#fff',pointBorderWidth:1,
     fill:false,tension:.3,spanGaps:true,order:0});
+  activeChartDrill={};
+  members.forEach((mem,i)=>{
+    months.forEach((mo,j)=>{
+      activeChartDrill[i+'|'+j]={title:'Campañas Activas · '+mem+' · '+(MES[mo]||mo),rows:act.filter(r=>r.carga===mem&&implMonth(r)===mo)};
+    });
+  });
   if(chart2)chart2.destroy();
   /* etiqueta numérica del CTR en cada mes */
   const ctrLabels={id:'ctrLabels',afterDatasetsDraw(c){
@@ -813,6 +887,7 @@ function renderActiveBar(rows,ctrRows){
     type:'bar',
     data:{labels:months.map(m=>MES[m]||m),datasets},
     options:{responsive:true,maintainAspectRatio:false,
+      onHover:(event,elements)=>{if(event.native){const hasBar=elements.some(el=>chart2&&chart2.data.datasets[el.datasetIndex].type!=='line');event.native.target.style.cursor=hasBar?'pointer':'default';}},
       layout:{padding:{top:18}},
       plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true,pointStyle:'rectRounded'}},
         tooltip:{callbacks:{
@@ -1003,9 +1078,29 @@ function updateSlaText(){
   const td=e.target.closest('td[data-k]');if(!td)return;
   const arr=drill[td.dataset.k];if(!arr||!arr.length)return;
   openModal(td.dataset.k,arr);}));
+document.getElementById('campMonthTable').addEventListener('dblclick',e=>{
+  const td=e.target.closest('td[data-k]');if(!td)return;
+  const k=td.dataset.k, rows=campMonthDrill[k];if(!rows||!rows.length)return;
+  const [c,mo]=k.split('||'), moNum=+mo;
+  const rowStyleFn=r=>{
+    const s=norm(r.fecha_fin_campania);if(!s)return '';
+    const yrM=s.match(/\b(20\d{2})\b/);if(!yrM)return '';
+    const yr=parseInt(yrM[1],10);
+    const nameM=s.toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/);
+    const isoM=s.match(/(\d{4})-(\d{1,2})/);
+    const finMo=nameM?MONTHS_ES[nameM[1]]:(isoM?parseInt(isoM[2],10):null);
+    if(finMo==null)return '';
+    return (yr<2026||(yr===2026&&finMo<moNum))
+      ?' style="background:var(--bad-bg);color:var(--bad-tx)"'
+      :' style="background:var(--ok-bg);color:var(--ok-tx)"';
+  };
+  openModalDirect('Implementación · '+c+' · '+(MES[moNum]||mo),dedupByCampaign(rows),'sla',COLS_CAMPAIGN.filter(col=>col!=='primera_impresion'),rowStyleFn);
+});
 
 const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','carga','abn',
   'mes','semana','clicks','shows','ctr','sla','sla_ok','estado','fecha_implementacion','primera_impresion','primera_imp_mes','fecha_inicio_campania','fecha_fin_campania','monto'];
+/* Columnas para el drill-down de los gráficos (nivel campaña: sin media ni pais) */
+const COLS_CAMPAIGN=COLS.filter(c=>c!=='media'&&c!=='pais'&&c!=='primera_imp_mes');
 
 function openModal(k,arr){
   const [kind,c,md,me,mo]=k.split('|');
@@ -1029,6 +1124,49 @@ function openModal(k,arr){
 }
 function closeModal(){document.getElementById('overlay').classList.remove('open');}
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
+
+function openModalDirect(title,arr,kind,customCols,rowStyleFn){
+  const cols=customCols||(kind==='sla'?COLS.filter(col=>col!=='primera_imp_mes'):COLS);
+  modalRows=arr;modalCols=cols;modalName=title.replace(/\W+/g,'-');
+  document.getElementById('mTitle').textContent=title;
+  document.getElementById('mCount').textContent=arr.length+' registro(s)';
+  let h='<thead><tr>'+cols.map(col=>`<th>${col}</th>`).join('')+'</tr></thead><tbody>';
+  arr.forEach(r=>{
+    let rowStyle='';
+    if(rowStyleFn){rowStyle=rowStyleFn(r);}
+    else if(kind==='sla'){if(r.sla_ok===1)rowStyle=' style="background:var(--ok-bg);color:var(--ok-tx)"';
+      else if(r.sla_ok===0)rowStyle=' style="background:var(--bad-bg);color:var(--bad-tx)"';}
+    h+='<tr'+rowStyle+'>'+cols.map(col=>{let v=r[col];
+      if(col==='ctr')v=fmtCtr(r.ctr);if(col==='sla_ok')v=r.sla_ok==null?'null':r.sla_ok;
+      return `<td>${esc(v==null?'':v)}</td>`;}).join('')+'</tr>';});
+  document.getElementById('rawTable').innerHTML=h+'</tbody>';
+  document.getElementById('overlay').classList.add('open');
+}
+
+function dedupByCampaign(rows){
+  const seen=new Set();
+  return rows.filter(r=>{if(!r.ms_campaign_id||seen.has(r.ms_campaign_id))return false;seen.add(r.ms_campaign_id);return true;});
+}
+document.getElementById('barChart').addEventListener('dblclick',e=>{
+  if(!chart)return;
+  const els=chart.getElementsAtEventForMode(e,'nearest',{intersect:true},false);
+  if(!els.length)return;
+  const el=els[0];
+  if(chart.data.datasets[el.datasetIndex].type==='line')return;
+  const d=barChartDrill[el.datasetIndex+'|'+el.index];
+  if(!d||!d.rows.length){toast('Sin registros para esta barra');return;}
+  openModalDirect(d.title,dedupByCampaign(d.rows),'sla',COLS_CAMPAIGN);
+});
+document.getElementById('activeChart').addEventListener('dblclick',e=>{
+  if(!chart2)return;
+  const els=chart2.getElementsAtEventForMode(e,'nearest',{intersect:true},false);
+  if(!els.length)return;
+  const el=els[0];
+  if(chart2.data.datasets[el.datasetIndex].type==='line')return;
+  const d=activeChartDrill[el.datasetIndex+'|'+el.index];
+  if(!d||!d.rows.length){toast('Sin registros para esta barra');return;}
+  openModalDirect(d.title,dedupByCampaign(d.rows),'sla',COLS_CAMPAIGN);
+});
 function exportModal(){
   const csv=Papa.unparse(modalRows.map(r=>{const o={};modalCols.forEach(c=>o[c]=r[c]);return o;}));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
