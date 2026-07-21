@@ -639,7 +639,7 @@ function render(){
   const ctrRows=filteredCtr();  // modelo_base_camp_ctr.csv → CTR (por primera_imp_mes)
   renderCards(rows,ctrRows);
   renderBar(rows);
-  renderCampMonth(ctrRows);
+  renderCampMonth(ctrRows, rows);
   renderActiveBar(rows,ctrRows);
   renderPivot('sla',rows);
   renderPivot('ctr',ctrRows);
@@ -653,36 +653,68 @@ function campHeat(t){
   const a=[237,233,254],b=[91,33,182];
   return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(',')})`;
 }
-function renderCampMonth(ctrRows){
+function renderCampMonth(ctrRows, mainRows){
   const rows2026=ctrRows.filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
-  const months=[...new Set(rows2026.map(firstImpMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
-  const cargas=[...new Set(rows2026.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const main2026=(mainRows||[]).filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
+  const months=[...new Set([
+    ...rows2026.map(firstImpMonth).filter(m=>m!=null),
+    ...main2026.map(implMonth).filter(m=>m!=null)
+  ])].sort((a,b)=>a-b);
+  const cargas=[...new Set([
+    ...rows2026.map(r=>r.carga).filter(Boolean),
+    ...main2026.map(r=>r.carga).filter(Boolean)
+  ])].sort((a,b)=>a.localeCompare(b,'es'));
   const tbl=document.getElementById('campMonthTable');
   if(!months.length||!cargas.length){
     tbl.innerHTML='<tbody><tr><td style="padding:16px;color:var(--muted)">Sin datos 2026 en la base CTR.</td></tr></tbody>';
     return;
   }
   campMonthDrill={};
+  /* Campañas activas: base CTR, agrupadas por firstImpMonth */
   const byCarMo={};
   rows2026.forEach(r=>{
     const mo=firstImpMonth(r); if(mo==null||!r.carga||!r.ms_campaign_id)return;
-    const k=r.carga+'||'+mo;
     byCarMo[r.carga]=byCarMo[r.carga]||{};
     (byCarMo[r.carga][mo]=byCarMo[r.carga][mo]||new Set()).add(r.ms_campaign_id);
+    const k='act||'+r.carga+'||'+mo;
+    (campMonthDrill[k]=campMonthDrill[k]||[]).push(r);
+  });
+  /* Campañas nuevas del mes: base principal, agrupadas por mes de implementación */
+  const byCarMoNew={};
+  main2026.forEach(r=>{
+    const mo=implMonth(r); if(mo==null||!r.carga||!r.ms_campaign_id)return;
+    byCarMoNew[r.carga]=byCarMoNew[r.carga]||{};
+    (byCarMoNew[r.carga][mo]=byCarMoNew[r.carga][mo]||new Set()).add(r.ms_campaign_id);
+    const k='new||'+r.carga+'||'+mo;
     (campMonthDrill[k]=campMonthDrill[k]||[]).push(r);
   });
   let maxVal=0;
   cargas.forEach(c=>months.forEach(mo=>{
-    const v=(byCarMo[c]&&byCarMo[c][mo])?byCarMo[c][mo].size:0;
-    if(v>maxVal)maxVal=v;
+    const va=(byCarMo[c]&&byCarMo[c][mo])?byCarMo[c][mo].size:0;
+    const vn=(byCarMoNew[c]&&byCarMoNew[c][mo])?byCarMoNew[c][mo].size:0;
+    if(va>maxVal)maxVal=va;
+    if(vn>maxVal)maxVal=vn;
   }));
-  let html=`<thead><tr><th class="dim" style="min-width:130px">AdOps</th>`+
+  let html=`<thead><tr><th class="dim" style="min-width:130px">AdOps</th><th class="dim" style="min-width:170px">Tipo</th>`+
     months.map(m=>`<th>${MES[m]||m}</th>`).join('')+`</tr></thead><tbody>`;
   cargas.forEach(c=>{
-    html+=`<tr><td class="dim" style="font-weight:600">${esc(c)}</td>`;
+    /* Fila 1: Campañas nuevas del mes (base principal, implMonth) */
+    html+=`<tr><td class="dim" rowspan="2" style="font-weight:700;vertical-align:middle">${esc(c)}</td>`;
+    html+=`<td class="dim" style="font-weight:600;font-size:11.5px;color:var(--brand-700)">Campañas nuevas del mes</td>`;
+    months.forEach(mo=>{
+      const set=(byCarMoNew[c]&&byCarMoNew[c][mo])||new Set();
+      const v=set.size, k='new||'+c+'||'+mo;
+      if(!v){html+=`<td class="val empty">–</td>`;return;}
+      const t=maxVal>0?v/maxVal:0;
+      const bg=campHeat(t),tx=t>0.55?'#fff':'var(--ink)';
+      html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
+    });
+    html+='</tr>';
+    /* Fila 2: Campañas activas (base CTR, firstImpMonth) */
+    html+=`<tr class="grp-end"><td class="dim" style="font-weight:600;font-size:11.5px;color:var(--teal)">Campañas activas</td>`;
     months.forEach(mo=>{
       const set=(byCarMo[c]&&byCarMo[c][mo])||new Set();
-      const v=set.size, k=c+'||'+mo;
+      const v=set.size, k='act||'+c+'||'+mo;
       if(!v){html+=`<td class="val empty">–</td>`;return;}
       const t=maxVal>0?v/maxVal:0;
       const bg=campHeat(t),tx=t>0.55?'#fff':'var(--ink)';
@@ -829,17 +861,14 @@ const isActive=r=>String(r.estado||'').trim().toLowerCase()==='active';
    línea de tendencia del CTR viene de modelo_base_camp_ctr.csv (ctrRows), asociando
    primera_imp_mes al mes del gráfico. */
 function renderActiveBar(rows,ctrRows){
-  const act=rows.filter(isActive);         // base de SLA/conteos → barras: campañas activas por mes de inicio
+  /* Barras: mismos valores que la tabla "Campañas activas" — base CTR 2026, por primera_imp_mes */
+  const act2026=ctrRows.filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
   const byMM={};
-  act.forEach(r=>{const mo=implMonth(r); if(mo==null||!r.carga)return;
+  act2026.forEach(r=>{const mo=firstImpMonth(r); if(mo==null||!r.carga||!r.ms_campaign_id)return;
     byMM[r.carga]=byMM[r.carga]||{};
     (byMM[r.carga][mo]=byMM[r.carga][mo]||new Set()).add(r.ms_campaign_id);});
   const members=Object.keys(byMM).sort((a,b)=>a.localeCompare(b,'es'));
-  /* Eje X: rango CONTIGUO de meses (del mínimo al máximo presente entre meses de
-     inicio de las barras y meses de primera_imp_mes del CTR). Así cada casilla del
-     gráfico corresponde a su número de mes de calendario (1=Ene, 2=Feb, …) y el CTR
-     de cada primera_imp_mes cae siempre en su mes, sin que un mes vacío desplace al resto. */
-  const present=[...act.map(implMonth),...ctrRows.map(firstImpMonth)].filter(m=>m!=null);
+  const present=ctrRows.map(firstImpMonth).filter(m=>m!=null);
   const months=present.length?Array.from({length:Math.max(...present)-Math.min(...present)+1},(_,i)=>Math.min(...present)+i):[];
   const cnt=(mem,mo)=>(byMM[mem]&&byMM[mem][mo]?byMM[mem][mo].size:0);
   const datasets=members.map((mem,i)=>({label:mem,
@@ -868,7 +897,7 @@ function renderActiveBar(rows,ctrRows){
   activeChartDrill={};
   members.forEach((mem,i)=>{
     months.forEach((mo,j)=>{
-      activeChartDrill[i+'|'+j]={title:'Campañas Activas · '+mem+' · '+(MES[mo]||mo),rows:act.filter(r=>r.carga===mem&&implMonth(r)===mo)};
+      activeChartDrill[i+'|'+j]={title:'Campañas Activas · '+mem+' · '+(MES[mo]||mo),rows:act2026.filter(r=>r.carga===mem&&firstImpMonth(r)===mo)};
     });
   });
   if(chart2)chart2.destroy();
@@ -1080,8 +1109,8 @@ function updateSlaText(){
   openModal(td.dataset.k,arr);}));
 document.getElementById('campMonthTable').addEventListener('dblclick',e=>{
   const td=e.target.closest('td[data-k]');if(!td)return;
-  const k=td.dataset.k, rows=campMonthDrill[k];if(!rows||!rows.length)return;
-  const [c,mo]=k.split('||'), moNum=+mo;
+  const k=td.dataset.k, drows=campMonthDrill[k];if(!drows||!drows.length)return;
+  const parts=k.split('||'), type=parts[0], c=parts[1], mo=parts[2], moNum=+mo;
   const rowStyleFn=r=>{
     const s=norm(r.fecha_fin_campania);if(!s)return '';
     const yrM=s.match(/\b(20\d{2})\b/);if(!yrM)return '';
@@ -1094,7 +1123,8 @@ document.getElementById('campMonthTable').addEventListener('dblclick',e=>{
       ?' style="background:var(--bad-bg);color:var(--bad-tx)"'
       :' style="background:var(--ok-bg);color:var(--ok-tx)"';
   };
-  openModalDirect('Implementación · '+c+' · '+(MES[moNum]||mo),dedupByCampaign(rows),'sla',COLS_CAMPAIGN.filter(col=>col!=='primera_impresion'),rowStyleFn);
+  const titleType=type==='new'?'Campañas Nuevas':'Campañas Activas';
+  openModalDirect(titleType+' · '+c+' · '+(MES[moNum]||mo),dedupByCampaign(drows),'sla',COLS_CAMPAIGN.filter(col=>col!=='primera_impresion'),rowStyleFn);
 });
 
 const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','carga','abn',
