@@ -653,6 +653,16 @@ function campHeat(t){
   const a=[237,233,254],b=[91,33,182];
   return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(',')})`;
 }
+function isExpiredForMonth(r,moNum){
+  const s=norm(r.fecha_fin_campania); if(!s) return false;
+  const yrM=s.match(/\b(20\d{2})\b/); if(!yrM) return false;
+  const yr=parseInt(yrM[1],10);
+  const nameM=s.toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/);
+  const isoM=s.match(/(\d{4})-(\d{1,2})/);
+  const finMo=nameM?MONTHS_ES[nameM[1]]:(isoM?parseInt(isoM[2],10):null);
+  if(finMo==null) return false;
+  return yr<2026||(yr===2026&&finMo<moNum);
+}
 function renderCampMonth(ctrRows, mainRows){
   const rows2026=ctrRows.filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
   const main2026=(mainRows||[]).filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
@@ -717,7 +727,9 @@ function renderCampMonth(ctrRows, mainRows){
       const v=set.size, k='act||'+c+'||'+mo;
       if(!v){html+=`<td class="val empty">–</td>`;return;}
       const t=maxVal>0?v/maxVal:0;
-      const bg=campHeat(t),tx=t>0.55?'#fff':'var(--ink)';
+      const bg=campHeat(t);
+      const hasExpired=(campMonthDrill[k]||[]).some(r=>isExpiredForMonth(r,mo));
+      const tx=hasExpired?'#dc2626':(t>0.55?'#fff':'var(--ink)');
       html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
     });
     html+='</tr>';
@@ -1111,18 +1123,9 @@ document.getElementById('campMonthTable').addEventListener('dblclick',e=>{
   const td=e.target.closest('td[data-k]');if(!td)return;
   const k=td.dataset.k, drows=campMonthDrill[k];if(!drows||!drows.length)return;
   const parts=k.split('||'), type=parts[0], c=parts[1], mo=parts[2], moNum=+mo;
-  const rowStyleFn=r=>{
-    const s=norm(r.fecha_fin_campania);if(!s)return '';
-    const yrM=s.match(/\b(20\d{2})\b/);if(!yrM)return '';
-    const yr=parseInt(yrM[1],10);
-    const nameM=s.toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/);
-    const isoM=s.match(/(\d{4})-(\d{1,2})/);
-    const finMo=nameM?MONTHS_ES[nameM[1]]:(isoM?parseInt(isoM[2],10):null);
-    if(finMo==null)return '';
-    return (yr<2026||(yr===2026&&finMo<moNum))
-      ?' style="background:var(--bad-bg);color:var(--bad-tx)"'
-      :' style="background:var(--ok-bg);color:var(--ok-tx)"';
-  };
+  const rowStyleFn=type==='act'
+    ? r=>isExpiredForMonth(r,moNum)?' style="background:var(--warn-bg);color:var(--warn-tx)"':''
+    : ()=>'';
   const titleType=type==='new'?'Campañas Nuevas':'Campañas Activas';
   openModalDirect(titleType+' · '+c+' · '+(MES[moNum]||mo),dedupByCampaign(drows),'sla',COLS_CAMPAIGN.filter(col=>col!=='primera_impresion'),rowStyleFn);
 });

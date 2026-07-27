@@ -70,6 +70,9 @@ header{background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,v
 .ms-panel label:hover{background:var(--brand-050)}
 .ms-allrow{font-weight:700;border-bottom:1px solid var(--line);margin-bottom:4px;border-radius:0}
 .ms-panel input{accent-color:var(--brand-600);width:15px;height:15px}
+.filter-text{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  background:#fff;font-size:13px;font-family:inherit;color:var(--ink);min-width:180px;outline:none}
+.filter-text:focus{border-color:var(--brand-500)}
 
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:6px 0 22px}
 .card{background:var(--card);border-radius:14px;padding:16px;box-shadow:var(--shadow);border-top:3px solid var(--brand-500)}
@@ -86,6 +89,7 @@ header{background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,v
 .chip{display:inline-flex;align-items:center;gap:6px}
 .sw{width:14px;height:14px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.06)}
 .note{font-size:11.5px;color:var(--muted);margin:10px 2px 0;line-height:1.5}
+.panel-h .hint{font-size:11.5px;color:var(--muted)}
 .chart-box{position:relative;height:330px}
 
 .tbl-scroll{overflow:auto}
@@ -206,6 +210,10 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
           </div>
         </div>
       </div>
+      <div class="ctl">
+        <label>Partner</label>
+        <input type="text" class="filter-text" id="partnerFilter" placeholder="Buscar partner…" autocomplete="off">
+      </div>
       <div class="spacer"></div>
       <div class="ctl">
         <label>&nbsp;</label>
@@ -220,6 +228,16 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
         <h2>Campañas Activas - CTR Promedio</h2>
       </div>
       <div class="panel-b"><div class="chart-box"><canvas id="activeChart"></canvas></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">
+        <h2>Implementación de Campañas por Partner</h2>
+        <span class="hint">↔ doble clic para ver registros</span>
+      </div>
+      <div class="panel-b">
+        <div class="tbl-scroll"><table class="pivot" id="campPartnerTable"></table></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -270,8 +288,9 @@ const REQ=['ms_campaign_id','media','modelo','mes','anio','sla_ok','ctr','abn'];
 const REQ_CTR=['ms_campaign_id','media','modelo','primera_imp_mes','anio','clicks','shows','abn'];
 
 let RAW=[], RAW_CTR=[], chart=null;
-let modalRows=[], modalName='detalle';
-const S={media:[],vertical:[]};
+let campPartnerDrill={};
+let modalRows=[], modalCols=[], modalName='detalle';
+const S={media:[],vertical:[],partner:''};
 const drill={};
 
 const norm=s=>(s==null?'':String(s)).trim();
@@ -422,15 +441,21 @@ let mmCtl=null, mvCtl=null;
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.media=[];S.vertical=[];
+  S.media=[];S.vertical=[];S.partner='';
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
   mvCtl=makeMulti(document.getElementById('msVertical'),verticals,a=>{S.vertical=a;render();});
+  document.getElementById('partnerFilter').addEventListener('input',e=>{S.partner=e.target.value.trim();render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.vertical=[]; mmCtl.reset(); mvCtl.reset(); render();};
+    S.media=[];S.vertical=[];S.partner='';
+    document.getElementById('partnerFilter').value='';
+    mmCtl.reset(); mvCtl.reset(); render();};
 }
 
-function match(r){ return (!S.media.length||S.media.includes(r.media))&&
-  (!S.vertical.length||S.vertical.includes(r.ms_product)); }
+function match(r){
+  if(S.partner){const p=S.partner.toLowerCase();
+    if(!(r.nombre||'').toLowerCase().includes(p)&&!(r.partner_ms||'').toLowerCase().includes(p)) return false;}
+  return (!S.media.length||S.media.includes(r.media))&&
+    (!S.vertical.length||S.vertical.includes(r.ms_product)); }
 function filtered(){    return RAW.filter(match); }
 function filteredCtr(){ return RAW_CTR.filter(match); }
 
@@ -439,6 +464,7 @@ function render(){
   const ctrRows=filteredCtr();
   renderCards(rows,ctrRows);
   renderActiveBar(rows,ctrRows);
+  renderCampPartner(ctrRows,rows);
   renderPivot(ctrRows);
   document.getElementById('lg-lo').style.background=heat(0);
   document.getElementById('lg-hi').style.background=heat(1);
@@ -470,11 +496,10 @@ const PALETTE=['#a78bfa','#5ec5bc','#fbb07a','#7dabf5','#ec8bbf','#a6c97a','#c19
 
 const isActive=r=>String(r.estado||'').trim().toLowerCase()==='active';
 function renderActiveBar(rows,ctrRows){
-  const act=rows.filter(isActive);
   const byMonth={};
-  act.forEach(r=>{const mo=implMonth(r); if(mo==null)return;
+  ctrRows.forEach(r=>{const mo=firstImpMonth(r); if(mo==null||!r.ms_campaign_id)return;
     (byMonth[mo]=byMonth[mo]||new Set()).add(r.ms_campaign_id);});
-  const present=[...act.map(implMonth),...ctrRows.map(firstImpMonth)].filter(m=>m!=null);
+  const present=ctrRows.map(firstImpMonth).filter(m=>m!=null);
   const months=present.length?Array.from({length:Math.max(...present)-Math.min(...present)+1},(_,i)=>Math.min(...present)+i):[];
   const cnt=mo=>(byMonth[mo]?byMonth[mo].size:0);
   const datasets=[{label:'Campañas activas',
@@ -517,6 +542,63 @@ function renderActiveBar(rows,ctrRows){
               y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},
                   ticks:{callback:v=>(+v).toFixed(2)+'%'},title:{display:true,text:'CTR Promedio (%)'}}}},
     plugins:[ctrLabels]});
+}
+
+function campHeat(t){
+  t=Math.max(0,Math.min(1,t));
+  const a=[237,233,254],b=[91,33,182];
+  return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(',')})`;
+}
+
+function renderCampPartner(ctrRows,mainRows){
+  const months=[...new Set([
+    ...ctrRows.map(firstImpMonth).filter(m=>m!=null),
+    ...mainRows.map(implMonth).filter(m=>m!=null)
+  ])].sort((a,b)=>a-b);
+  const tbl=document.getElementById('campPartnerTable');
+  if(!months.length){
+    tbl.innerHTML='<tbody><tr><td style="padding:16px;color:var(--muted)">Sin datos disponibles.</td></tr></tbody>';
+    return;
+  }
+  campPartnerDrill={};
+  const newByMonth={};
+  mainRows.forEach(r=>{
+    const mo=implMonth(r); if(mo==null||!r.ms_campaign_id)return;
+    (newByMonth[mo]=newByMonth[mo]||new Set()).add(r.ms_campaign_id);
+    const k='new||'+mo;
+    (campPartnerDrill[k]=campPartnerDrill[k]||[]).push(r);
+  });
+  const actByMonth={};
+  ctrRows.forEach(r=>{
+    const mo=firstImpMonth(r); if(mo==null||!r.ms_campaign_id)return;
+    (actByMonth[mo]=actByMonth[mo]||new Set()).add(r.ms_campaign_id);
+    const k='act||'+mo;
+    (campPartnerDrill[k]=campPartnerDrill[k]||[]).push(r);
+  });
+  let maxVal=0;
+  months.forEach(mo=>{
+    const vn=(newByMonth[mo]||new Set()).size, va=(actByMonth[mo]||new Set()).size;
+    if(vn>maxVal)maxVal=vn; if(va>maxVal)maxVal=va;
+  });
+  let html=`<thead><tr><th class="dim" style="min-width:200px">Tipo</th>`+
+    months.map(m=>`<th>${MES[m]||m}</th>`).join('')+`</tr></thead><tbody>`;
+  html+=`<tr><td class="dim" style="font-weight:600;font-size:11.5px;color:var(--brand-700)">Campañas nuevas del mes</td>`;
+  months.forEach(mo=>{
+    const v=(newByMonth[mo]||new Set()).size, k='new||'+mo;
+    if(!v){html+=`<td class="val empty">–</td>`;return;}
+    const t=maxVal>0?v/maxVal:0, bg=campHeat(t), tx=t>0.55?'#fff':'var(--ink)';
+    html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
+  });
+  html+='</tr>';
+  html+=`<tr class="grp-end"><td class="dim" style="font-weight:600;font-size:11.5px;color:var(--teal)">Campañas activas</td>`;
+  months.forEach(mo=>{
+    const v=(actByMonth[mo]||new Set()).size, k='act||'+mo;
+    if(!v){html+=`<td class="val empty">–</td>`;return;}
+    const t=maxVal>0?v/maxVal:0, bg=campHeat(t), tx=t>0.55?'#fff':'var(--ink)';
+    html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
+  });
+  html+='</tr></tbody>';
+  tbl.innerHTML=html;
 }
 
 function matchModel(md){return MODEL_ORDER.find(x=>x.toLowerCase()===md.toLowerCase())||md;}
@@ -579,12 +661,37 @@ document.getElementById('ctrTable').addEventListener('dblclick',e=>{
   const arr=drill[td.dataset.k];if(!arr||!arr.length)return;
   openModal(td.dataset.k,arr);});
 
+document.getElementById('campPartnerTable').addEventListener('dblclick',e=>{
+  const td=e.target.closest('td[data-k]');if(!td)return;
+  const k=td.dataset.k, drows=campPartnerDrill[k];if(!drows||!drows.length)return;
+  const parts=k.split('||'), type=parts[0], mo=+parts[1];
+  const titleType=type==='new'?'Campañas Nuevas del Mes':'Campañas Activas';
+  const cols=type==='new'?COLS_PARTNER_NEW:COLS_PARTNER_ACT;
+  openPartnerModal(titleType+' · '+(MES[mo]||mo),drows,cols);});
+
+function openPartnerModal(title,arr,cols){
+  const seen=new Set();
+  const deduped=arr.filter(r=>{if(!r.ms_campaign_id||seen.has(r.ms_campaign_id))return false;seen.add(r.ms_campaign_id);return true;});
+  modalRows=deduped; modalCols=cols; modalName=title.replace(/\W+/g,'-');
+  document.getElementById('mTitle').textContent=title;
+  document.getElementById('mCount').textContent=deduped.length+' registro(s)';
+  let h='<thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+  deduped.forEach(r=>{h+='<tr>'+cols.map(col=>{const v=col==='ctr'?fmtCtr(r.ctr):r[col];
+    return `<td>${esc(v==null?'':v)}</td>`;}).join('')+'</tr>';});
+  document.getElementById('rawTable').innerHTML=h+'</tbody>';
+  document.getElementById('overlay').classList.add('open');
+}
+
 const COLS=['ms_campaign_id','nombre','marca','partner_ok','ms_product','media','pais','modelo','abn',
   'mes','semana','clicks','shows','ctr','estado','fecha_implementacion','primera_impresion','primera_imp_mes','fecha_inicio_campania','fecha_fin_campania','monto'];
+const COLS_PARTNER_NEW=['ms_campaign_id','nombre','partner_ms','partner_ok','ms_product','pais','modelo','abn',
+  'mes','semana','estado','fecha_implementacion','primera_impresion','fecha_inicio_campania','fecha_fin_campania','monto'];
+const COLS_PARTNER_ACT=['ms_campaign_id','nombre','partner_ms','partner_ok','ms_product','pais','modelo','abn',
+  'primera_imp_mes','clicks','shows','ctr','estado','fecha_implementacion','primera_impresion','fecha_inicio_campania','fecha_fin_campania','monto'];
 
 function openModal(k,arr){
   const [kind,md,me,mo]=k.split('|');
-  modalRows=arr; modalName=`${kind}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
+  modalRows=arr; modalCols=COLS; modalName=`${kind}_${md}_${me}_${mo}`.replace(/\W+/g,'-');
   document.getElementById('mTitle').textContent=
     `CTR · ${md} › ${me} · ${mo==='ALL'?'todos los meses':(MES[+mo]||mo)}`;
   document.getElementById('mCount').textContent=arr.length+' registro(s)';
@@ -597,7 +704,8 @@ function openModal(k,arr){
 function closeModal(){document.getElementById('overlay').classList.remove('open');}
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
 function exportModal(){
-  const csv=Papa.unparse(modalRows.map(r=>{const o={};COLS.forEach(c=>o[c]=r[c]);return o;}));
+  const cols=modalCols.length?modalCols:COLS;
+  const csv=Papa.unparse(modalRows.map(r=>{const o={};cols.forEach(c=>o[c]=r[c]);return o;}));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=modalName+'.csv';a.click();URL.revokeObjectURL(a.href);
 }
