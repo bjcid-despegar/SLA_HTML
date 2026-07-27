@@ -729,7 +729,7 @@ function renderCampMonth(ctrRows, mainRows){
       const t=maxVal>0?v/maxVal:0;
       const bg=campHeat(t);
       const hasExpired=(campMonthDrill[k]||[]).some(r=>isExpiredForMonth(r,mo));
-      const tx=hasExpired?'#dc2626':(t>0.55?'#fff':'var(--ink)');
+      const tx=hasExpired?'#fde047':(t>0.55?'#fff':'var(--ink)');
       html+=`<td class="val" data-k="${esc(k)}" style="background:${bg};color:${tx};font-weight:700">${v}</td>`;
     });
     html+='</tr>';
