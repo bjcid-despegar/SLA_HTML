@@ -73,6 +73,9 @@ header{background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,v
 .filter-text{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
   background:#fff;font-size:13px;font-family:inherit;color:var(--ink);min-width:180px;outline:none}
 .filter-text:focus{border-color:var(--brand-500)}
+.tog-btn{border:1px solid var(--line);border-radius:20px;padding:5px 14px;font-size:12px;
+  font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--muted);transition:.15s}
+.tog-btn.tog-on{background:var(--brand-500);color:#fff;border-color:var(--brand-500)}
 
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:6px 0 22px}
 .card{background:var(--card);border-radius:14px;padding:16px;box-shadow:var(--shadow);border-top:3px solid var(--brand-500)}
@@ -211,6 +214,16 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
         </div>
       </div>
       <div class="ctl">
+        <label>Modelo</label>
+        <div class="ms" id="msModelo">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ctl">
         <label>Partner</label>
         <input type="text" class="filter-text" id="partnerFilter" placeholder="Buscar partner…" autocomplete="off">
       </div>
@@ -232,12 +245,23 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
 
     <div class="panel">
       <div class="panel-h">
-        <h2>Implementación de Campañas por Partner</h2>
+        <h2>Número de Campañas Implementadas</h2>
         <span class="hint">↔ doble clic para ver registros</span>
       </div>
       <div class="panel-b">
         <div class="tbl-scroll"><table class="pivot" id="campPartnerTable"></table></div>
       </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">
+        <h2>Partners por Modelo de Gestión</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="tog-btn tog-on" id="togNuevas" onclick="togglePMSeries('new')">Nuevos</button>
+          <button class="tog-btn tog-on" id="togActivas" onclick="togglePMSeries('act')">Activos</button>
+        </div>
+      </div>
+      <div class="panel-b"><div class="chart-box" style="height:400px"><canvas id="partnerModelChart"></canvas></div></div>
     </div>
 
     <div class="panel">
@@ -437,23 +461,25 @@ function makeMulti(root,values,onChange){
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
-let mmCtl=null, mvCtl=null;
+let mmCtl=null, mvCtl=null, mmModelo=null;
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.media=[];S.vertical=[];S.partner='';
+  S.media=[];S.vertical=[];S.modelo=[];S.partner='';
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
   mvCtl=makeMulti(document.getElementById('msVertical'),verticals,a=>{S.vertical=a;render();});
+  mmModelo=makeMulti(document.getElementById('msModelo'),MODEL_ORDER,a=>{S.modelo=a;render();});
   document.getElementById('partnerFilter').addEventListener('input',e=>{S.partner=e.target.value.trim();render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.vertical=[];S.partner='';
+    S.media=[];S.vertical=[];S.modelo=[];S.partner='';
     document.getElementById('partnerFilter').value='';
-    mmCtl.reset(); mvCtl.reset(); render();};
+    mmCtl.reset(); mvCtl.reset(); mmModelo.reset(); render();};
 }
 
 function match(r){
   if(S.partner){const p=S.partner.toLowerCase();
     if(!(r.nombre||'').toLowerCase().includes(p)&&!(r.partner_ms||'').toLowerCase().includes(p)) return false;}
+  if(S.modelo.length){const md=matchModel(r.modelo||'');if(!S.modelo.includes(md))return false;}
   return (!S.media.length||S.media.includes(r.media))&&
     (!S.vertical.length||S.vertical.includes(r.ms_product)); }
 function filtered(){    return RAW.filter(match); }
@@ -465,6 +491,7 @@ function render(){
   renderCards(rows,ctrRows);
   renderActiveBar(rows,ctrRows);
   renderCampPartner(ctrRows,rows);
+  renderPartnerModelChart(ctrRows,rows);
   renderPivot(ctrRows);
   document.getElementById('lg-lo').style.background=heat(0);
   document.getElementById('lg-hi').style.background=heat(1);
@@ -473,16 +500,27 @@ function render(){
 const fmtCtr=x=>x==null?'–':x.toFixed(2);
 
 function renderCards(rows,ctrRows){
-  const camps=new Set(rows.map(r=>r.ms_campaign_id).filter(Boolean)).size;
   const places=countPlacements(rows);
   let ctrCs=0,ctrSs=0;
   ctrRows.forEach(r=>{const c=numCount(r.clicks),s=numCount(r.shows);
     if(c!=null&&s!=null){ctrCs+=c;ctrSs+=s;}});
   const ctrProm=ctrSs>0?ctrCs/ctrSs*100:null;
   const ctrPlaces=countPlacements(ctrRows);
+  /* MoM campañas activas */
+  const moSet=[...new Set(ctrRows.map(firstImpMonth).filter(m=>m!=null))].sort((a,b)=>b-a);
+  const curMo=moSet[0], prevMo=moSet[1];
+  const campSet=mo=>new Set(ctrRows.filter(r=>firstImpMonth(r)===mo&&r.ms_campaign_id).map(r=>r.ms_campaign_id));
+  const actCur=curMo!=null?campSet(curMo).size:0;
+  const actPrev=prevMo!=null?campSet(prevMo).size:null;
+  const mom=actPrev?((actCur-actPrev)/actPrev*100):null;
+  const momColor=mom==null?'':(mom>=0?'color:var(--ok-tx)':'color:var(--bad-tx)');
+  const momSign=mom==null?'':(mom>=0?'▲ +':'▼ ');
+  const momTxt=mom==null?(curMo?'sin mes anterior':'sin datos')
+    :`<span style="${momColor}">${momSign}${Math.abs(mom).toFixed(1)}%</span> vs ${MES[prevMo]||prevMo}`;
+  const campLabel=actCur.toLocaleString('es-MX');
   const single=(k,v,s,c)=>`<div class="card" style="border-top-color:${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   document.getElementById('cards').innerHTML=
-    single('Campañas',camps.toLocaleString('es-MX'),'IDs únicos de campaña','var(--brand-500)')+
+    single('Campañas activas',campLabel,momTxt,'var(--brand-500)')+
     single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
     single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%',ctrPlaces+' placements','var(--teal)');
 }
@@ -599,6 +637,125 @@ function renderCampPartner(ctrRows,mainRows){
   });
   html+='</tr></tbody>';
   tbl.innerHTML=html;
+}
+
+const MODEL_COLORS={
+  Black:   {new:'#27272a',act:'#a1a1aa'},
+  Premium: {new:'#4c1d95',act:'#c4b5fd'},
+  Business:{new:'#14532d',act:'#4ade80'},
+  Economy: {new:'#1e3a8a',act:'#93c5fd'},
+};
+let partnerModelChart=null;
+let partnerModelDrill={};
+
+function renderPartnerModelChart(ctrRows,mainRows){
+  /* Eje X: meses. 8 datasets: 4 modelos × {nuevas, activas}.
+     Y: count distinct partner_ms. Dataset interleaved: [Black·N, Black·A, Premium·N, ...] */
+  partnerModelDrill={};
+  const months=[...new Set([
+    ...ctrRows.map(firstImpMonth).filter(m=>m!=null),
+    ...mainRows.map(implMonth).filter(m=>m!=null)
+  ])].sort((a,b)=>a-b);
+  if(!months.length)return;
+
+  /* Precalcular sets por modelo × mes */
+  const newSets={}, actSets={};  /* key: model+'||'+mo */
+  mainRows.forEach(r=>{
+    if(!r.partner_ms)return;
+    const mo=implMonth(r); if(mo==null)return;
+    const md=(r.modelo||'').trim();
+    const k=md+'||'+mo;
+    (newSets[k]=newSets[k]||new Set()).add(r.partner_ms);
+    const dk='new||'+md+'||'+mo;
+    (partnerModelDrill[dk]=partnerModelDrill[dk]||[]).push(r);
+  });
+  ctrRows.forEach(r=>{
+    if(!r.partner_ms)return;
+    const mo=firstImpMonth(r); if(mo==null)return;
+    const md=(r.modelo||'').trim();
+    const k=md+'||'+mo;
+    (actSets[k]=actSets[k]||new Set()).add(r.partner_ms);
+    const dk='act||'+md+'||'+mo;
+    (partnerModelDrill[dk]=partnerModelDrill[dk]||[]).push(r);
+  });
+
+  const datasets=[];
+  MODEL_ORDER.forEach(model=>{
+    const col=MODEL_COLORS[model]||{new:'#888',act:'#ccc'};
+    datasets.push({
+      label:model+' · Nuevos',
+      data:months.map(mo=>(newSets[model+'||'+mo]||new Set()).size||null),
+      backgroundColor:col.new,borderRadius:4,maxBarThickness:18,borderWidth:0,
+      _model:model,_type:'new'
+    });
+    datasets.push({
+      label:model+' · Activos',
+      data:months.map(mo=>(actSets[model+'||'+mo]||new Set()).size||null),
+      backgroundColor:col.act,borderRadius:4,maxBarThickness:18,borderWidth:0,
+      _model:model,_type:'act'
+    });
+  });
+
+  if(partnerModelChart)partnerModelChart.destroy();
+  partnerModelChart=new Chart(document.getElementById('partnerModelChart'),{
+    type:'bar',
+    data:{labels:months.map(m=>MES[m]||m),datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:16}},
+      plugins:{
+        legend:{display:true,position:'bottom',
+          labels:{usePointStyle:true,pointStyle:'rectRounded',
+            font:{size:11},padding:12,boxWidth:12}},
+        tooltip:{callbacks:{
+          title:items=>`${items[0].label}`,
+          label:c=>`${c.dataset.label}: ${c.parsed.y??0} partner(s)`,
+          labelColor:c=>({backgroundColor:c.dataset.backgroundColor,borderColor:'transparent'})}}},
+      scales:{
+        x:{grid:{display:false}},
+        y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},
+          title:{display:true,text:'Número de Partners',font:{size:11}}}}}});
+
+  document.getElementById('partnerModelChart').ondblclick=function(evt){
+    const els=partnerModelChart.getElementsAtEventForMode(evt,'nearest',{intersect:true},false);
+    if(!els.length)return;
+    const el=els[0];
+    const ds=partnerModelChart.data.datasets[el.datasetIndex];
+    const mo=months[el.index];
+    openPartnerDrillModal(ds._model,ds._type,mo,partnerModelDrill[ds._type+'||'+ds._model+'||'+mo]||[]);
+  };
+}
+
+function openPartnerDrillModal(model,type,mo,raw){
+  const typeLabel=type==='new'?'Partners Nuevos':'Partners Activos';
+  const title=model+' · '+typeLabel+' · '+(MES[mo]||mo);
+  const byPartner={};
+  raw.forEach(r=>{
+    if(!r.partner_ms)return;
+    if(!byPartner[r.partner_ms])byPartner[r.partner_ms]=new Set();
+    if(r.ms_campaign_id)byPartner[r.partner_ms].add(r.ms_campaign_id);
+  });
+  const rows=Object.entries(byPartner)
+    .map(([p,s])=>({partner_ms:p,campañas:s.size}))
+    .sort((a,b)=>a.partner_ms.localeCompare(b.partner_ms,'es'));
+  const cols=['partner_ms','campañas'];
+  modalRows=rows; modalCols=cols; modalName=title.replace(/\W+/g,'-');
+  document.getElementById('mTitle').textContent=title;
+  document.getElementById('mCount').textContent=rows.length+' partner(s)';
+  let h='<thead><tr>'+cols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{h+='<tr>'+cols.map(col=>`<td>${esc(r[col]==null?'':String(r[col]))}</td>`).join('')+'</tr>';});
+  document.getElementById('rawTable').innerHTML=h+'</tbody>';
+  document.getElementById('overlay').classList.add('open');
+}
+
+function togglePMSeries(type){
+  if(!partnerModelChart)return;
+  const btn=document.getElementById(type==='new'?'togNuevas':'togActivas');
+  btn.classList.toggle('tog-on');
+  const show=btn.classList.contains('tog-on');
+  partnerModelChart.data.datasets.forEach((ds,i)=>{
+    if(ds._type===type) partnerModelChart.getDatasetMeta(i).hidden=!show;
+  });
+  partnerModelChart.update();
 }
 
 function matchModel(md){return MODEL_ORDER.find(x=>x.toLowerCase()===md.toLowerCase())||md;}
