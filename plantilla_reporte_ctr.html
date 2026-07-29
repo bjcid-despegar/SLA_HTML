@@ -697,12 +697,44 @@ function renderPartnerModelChart(ctrRows,mainRows){
     });
   });
 
+  const pmStackTotals={
+    id:'pmStackTotals',
+    afterDatasetsDraw(chart){
+      const ctx=chart.ctx; ctx.save();
+      ctx.font='bold 11px "Segoe UI",system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='bottom';
+      const n=chart.data.labels.length;
+      const stacks={};
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta=chart.getDatasetMeta(di); if(meta.hidden)return;
+        (stacks[ds.stack]=stacks[ds.stack]||[]).push({ds,meta});
+      });
+      Object.values(stacks).forEach(group=>{
+        for(let j=0;j<n;j++){
+          let total=0, topY=Infinity, barX=null;
+          group.forEach(({ds,meta})=>{
+            const v=ds.data[j]; if(v!=null&&v>0)total+=v;
+            const bar=meta.data[j]; if(!bar)return;
+            if(bar.y<topY){topY=bar.y; barX=bar.x;}
+          });
+          if(total>0&&barX!=null){
+            ctx.lineWidth=3; ctx.strokeStyle='#fff';
+            ctx.strokeText(total,barX,topY-4);
+            ctx.fillStyle='#1e1b2e';
+            ctx.fillText(total,barX,topY-4);
+          }
+        }
+      });
+      ctx.restore();
+    }
+  };
+
   if(partnerModelChart)partnerModelChart.destroy();
   partnerModelChart=new Chart(document.getElementById('partnerModelChart'),{
     type:'bar',
     data:{labels:months.map(m=>MES[m]||m),datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{top:16}},
+      layout:{padding:{top:24}},
       plugins:{
         legend:{display:true,position:'bottom',
           labels:{usePointStyle:true,pointStyle:'rectRounded',
@@ -714,7 +746,8 @@ function renderPartnerModelChart(ctrRows,mainRows){
       scales:{
         x:{grid:{display:false},stacked:true},
         y:{stacked:true,beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},
-          title:{display:true,text:'Número de Partners',font:{size:11}}}}}});
+          title:{display:true,text:'Número de Partners',font:{size:11}}}}},
+    plugins:[pmStackTotals]});
 
   document.getElementById('partnerModelChart').ondblclick=function(evt){
     const els=partnerModelChart.getElementsAtEventForMode(evt,'nearest',{intersect:true},false);
