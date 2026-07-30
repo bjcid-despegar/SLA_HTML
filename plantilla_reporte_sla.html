@@ -78,6 +78,23 @@ header{background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,v
 .filter-text{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
   background:#fff;font-size:13px;font-family:inherit;color:var(--ink);min-width:180px;outline:none}
 .filter-text:focus{border-color:var(--brand-500)}
+.tog-btn{border:1px solid var(--line);border-radius:20px;padding:5px 14px;font-size:12px;
+  font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--muted);transition:.15s}
+.tog-btn.tog-on{background:var(--brand-500);color:#fff;border-color:var(--brand-500)}
+.date-f{display:flex;flex-direction:column;gap:4px;min-width:155px}
+.date-op,.date-in{padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+  background:#fff;font-size:12.5px;font-family:inherit;color:var(--ink);outline:none;width:100%}
+.date-op:focus,.date-in:focus{border-color:var(--brand-500)}
+.fchips{display:flex;flex-wrap:wrap;gap:7px;align-items:center;width:100%;
+  padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.fchips-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);white-space:nowrap;margin-right:2px}
+.fchip{border:1.5px solid var(--line);border-radius:20px;padding:5px 14px;font-size:12px;
+  font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:var(--muted);
+  transition:.15s;white-space:nowrap;line-height:1.4;user-select:none}
+.fchip:hover{border-color:var(--brand-300);color:var(--brand-600);background:var(--brand-050)}
+.fchip.fchip-on{background:var(--brand-500);color:#fff;border-color:var(--brand-500)}
+.fchip.fchip-on:hover{background:var(--brand-600);border-color:var(--brand-600)}
 
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:6px 0 22px}
 .card{background:var(--card);border-radius:14px;padding:16px;box-shadow:var(--shadow);border-top:3px solid var(--brand-500)}
@@ -195,8 +212,20 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
   <div id="report" style="display:none">
 
     <div class="controls">
-      <div class="ctl">
-        <label>Filtro · Media (placement)</label>
+      <div class="fchips">
+        <span class="fchips-lbl">Filtros:</span>
+        <button class="fchip fchip-on" data-target="fctlMedia">Media</button>
+        <button class="fchip fchip-on" data-target="fctlVertical">Vertical</button>
+        <button class="fchip fchip-on" data-target="fctlModelo">Modelo</button>
+        <button class="fchip fchip-on" data-target="fctlPartner">Partner</button>
+        <button class="fchip" data-target="fctlMarca">Marca</button>
+        <button class="fchip" data-target="fctlPais">País</button>
+        <button class="fchip" data-target="fctlCampId">ID Campaña</button>
+        <button class="fchip" data-target="fctlFechaInicio">Fecha Inicio</button>
+        <button class="fchip" data-target="fctlFechaFin">Fecha Fin</button>
+      </div>
+      <div class="ctl" id="fctlMedia">
+        <label>Media</label>
         <div class="ms" id="msMedia">
           <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
           <div class="ms-panel">
@@ -205,8 +234,8 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
           </div>
         </div>
       </div>
-      <div class="ctl">
-        <label>Filtro · Vertical</label>
+      <div class="ctl" id="fctlVertical">
+        <label>Vertical</label>
         <div class="ms" id="msVertical">
           <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
           <div class="ms-panel">
@@ -215,9 +244,71 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
           </div>
         </div>
       </div>
-      <div class="ctl">
+      <div class="ctl" id="fctlModelo">
+        <label>Modelo</label>
+        <div class="ms" id="msModelo">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ctl" id="fctlPartner">
         <label>Partner</label>
         <input type="text" class="filter-text" id="partnerFilter" placeholder="Buscar partner…" autocomplete="off">
+      </div>
+      <div class="ctl" id="fctlMarca" style="display:none">
+        <label>Marca</label>
+        <div class="ms" id="msMarca">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ctl" id="fctlPais" style="display:none">
+        <label>País</label>
+        <div class="ms" id="msPais">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ctl" id="fctlCampId" style="display:none">
+        <label>ID Campaña</label>
+        <input type="text" class="filter-text" id="campIdFilter" placeholder="Buscar ID…" autocomplete="off" style="min-width:140px">
+      </div>
+      <div class="ctl" id="fctlFechaInicio" style="display:none">
+        <label>Fecha Inicio</label>
+        <div class="date-f">
+          <select class="date-op" id="fioOp" onchange="onDateOpChange('fio')">
+            <option value="">Sin filtro</option>
+            <option value="before">Antes de</option>
+            <option value="after">Después de</option>
+            <option value="eq">Igual a</option>
+            <option value="between">Entre</option>
+          </select>
+          <input type="date" class="date-in" id="fioD1" oninput="updateDateFilter('fio')">
+          <input type="date" class="date-in" id="fioD2" style="display:none" oninput="updateDateFilter('fio')">
+        </div>
+      </div>
+      <div class="ctl" id="fctlFechaFin" style="display:none">
+        <label>Fecha Fin</label>
+        <div class="date-f">
+          <select class="date-op" id="ffiOp" onchange="onDateOpChange('ffi')">
+            <option value="">Sin filtro</option>
+            <option value="before">Antes de</option>
+            <option value="after">Después de</option>
+            <option value="eq">Igual a</option>
+            <option value="between">Entre</option>
+          </select>
+          <input type="date" class="date-in" id="ffiD1" oninput="updateDateFilter('ffi')">
+          <input type="date" class="date-in" id="ffiD2" style="display:none" oninput="updateDateFilter('ffi')">
+        </div>
       </div>
       <div class="spacer"></div>
       <div class="ctl">
@@ -303,7 +394,8 @@ const SLA={
 let RAW=[], RAW_CTR=[], chart=null, slaMetric='cumpl';
 let campPartnerDrill={};
 let modalRows=[], modalCols=[], modalName='detalle';
-const S={media:[],vertical:[],partner:''};
+const S={media:[],vertical:[],modelo:[],marca:[],pais:[],partner:'',campId:'',
+  fechaInicio:{op:'',d1:'',d2:''},fechaFin:{op:'',d1:'',d2:''}};
 const drill={};
 
 const norm=s=>(s==null?'':String(s)).trim();
@@ -401,7 +493,8 @@ function parseCsv(text,req){
     fecha_implementacion:norm(r.fecha_implementacion),anio:norm(r.anio),mes:parseInt(r.mes,10),
     semana:norm(r.semana),primera_impresion:norm(r.primera_impresion),primera_imp_mes:norm(r.primera_imp_mes),sla:numOrNull(r.sla),
     fecha_inicio_campania:norm(r.fecha_inicio_campania),fecha_fin_campania:norm(r.fecha_fin_campania),monto:norm(r.monto),modelo:norm(r.modelo),
-    estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok)
+    estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok),
+    country_oi:norm(r.country_oi)
   }));
   const yr=r=>{const s=r.anio+' '+r.fecha_implementacion+' '+r.fecha_negociada;
     const m=s.match(/\b(20\d{2})\b/);return m?m[1]:'';};
@@ -448,28 +541,108 @@ function makeMulti(root,values,onChange){
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
-let mmCtl=null, mvCtl=null;
+let mmCtl=null,mvCtl=null,mmModelo=null,mmMarca=null,mmPais=null;
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.media=[];S.vertical=[];S.partner='';
+  const modelos=[...new Set([...RAW,...RAW_CTR].map(r=>r.modelo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const marcas=[...new Set(RAW.map(r=>r.marca).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const paises=[...new Set([...RAW,...RAW_CTR].map(r=>r.country_oi).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  S.media=[];S.vertical=[];S.modelo=[];S.marca=[];S.pais=[];S.partner='';S.campId='';
+  S.fechaInicio={op:'',d1:'',d2:''};S.fechaFin={op:'',d1:'',d2:''};
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
   mvCtl=makeMulti(document.getElementById('msVertical'),verticals,a=>{S.vertical=a;render();});
+  mmModelo=makeMulti(document.getElementById('msModelo'),modelos,a=>{S.modelo=a;render();});
+  mmMarca=makeMulti(document.getElementById('msMarca'),marcas,a=>{S.marca=a;render();});
+  mmPais=makeMulti(document.getElementById('msPais'),paises,a=>{S.pais=a;render();});
   document.getElementById('partnerFilter').addEventListener('input',e=>{S.partner=e.target.value.trim();render();});
+  document.getElementById('campIdFilter').addEventListener('input',e=>{S.campId=e.target.value.trim();render();});
   document.querySelectorAll('#slaSeg button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#slaSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.vertical=[];S.partner='';
+    S.media=[];S.vertical=[];S.modelo=[];S.marca=[];S.pais=[];S.partner='';S.campId='';
+    S.fechaInicio={op:'',d1:'',d2:''};S.fechaFin={op:'',d1:'',d2:''};
     document.getElementById('partnerFilter').value='';
-    mmCtl.reset(); mvCtl.reset(); render();};
+    document.getElementById('campIdFilter').value='';
+    ['fioOp','fioD1','fioD2','ffiOp','ffiD1','ffiD2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('fioD2').style.display='none';
+    document.getElementById('ffiD2').style.display='none';
+    mmCtl.reset();mvCtl.reset();mmModelo.reset();mmMarca.reset();mmPais.reset();render();};
 }
 
+function parseISODate(s){
+  if(!s)return null;
+  const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  const nm=String(s).toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s*(\d{4})/);
+  if(nm)return new Date(+nm[2],MESES[nm[1]]-1,1);
+  return null;
+}
+function matchDateFilter(val,st){
+  if(!st||!st.op||!st.d1)return true;
+  const fd=parseISODate(val); if(!fd)return true;
+  const d1=new Date(st.d1+'T00:00:00');
+  if(st.op==='before') return fd<d1;
+  if(st.op==='after')  return fd>d1;
+  if(st.op==='eq')     return fd.getFullYear()===d1.getFullYear()&&fd.getMonth()===d1.getMonth()&&fd.getDate()===d1.getDate();
+  if(st.op==='between'){if(!st.d2)return fd>=d1; const d2=new Date(st.d2+'T00:00:00');return fd>=d1&&fd<=d2;}
+  return true;
+}
+function onDateOpChange(prefix){
+  const op=document.getElementById(prefix+'Op').value;
+  document.getElementById(prefix+'D2').style.display=op==='between'?'':'none';
+  updateDateFilter(prefix);
+}
+function updateDateFilter(prefix){
+  const op=document.getElementById(prefix+'Op').value;
+  const d1=document.getElementById(prefix+'D1').value;
+  const d2=document.getElementById(prefix+'D2').value;
+  if(prefix==='fio')S.fechaInicio={op,d1,d2};
+  else S.fechaFin={op,d1,d2};
+  render();
+}
+function clearFilterCtl(id){
+  switch(id){
+    case 'fctlMedia':       S.media=[];    if(mmCtl)mmCtl.reset();    break;
+    case 'fctlVertical':    S.vertical=[]; if(mvCtl)mvCtl.reset();    break;
+    case 'fctlModelo':      S.modelo=[];   if(mmModelo)mmModelo.reset(); break;
+    case 'fctlMarca':       S.marca=[];    if(mmMarca)mmMarca.reset(); break;
+    case 'fctlPais':        S.pais=[];     if(mmPais)mmPais.reset();   break;
+    case 'fctlPartner':     S.partner='';  const pf=document.getElementById('partnerFilter');if(pf)pf.value=''; break;
+    case 'fctlCampId':      S.campId='';   const cf=document.getElementById('campIdFilter');if(cf)cf.value=''; break;
+    case 'fctlFechaInicio': S.fechaInicio={op:'',d1:'',d2:''};
+      ['fioOp','fioD1','fioD2'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+      document.getElementById('fioD2').style.display='none'; break;
+    case 'fctlFechaFin':    S.fechaFin={op:'',d1:'',d2:''};
+      ['ffiOp','ffiD1','ffiD2'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+      document.getElementById('ffiD2').style.display='none'; break;
+  }
+  render();
+}
+document.querySelectorAll('.fchip[data-target]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    btn.classList.toggle('fchip-on');
+    const target=document.getElementById(btn.dataset.target);
+    if(!target)return;
+    const isOn=btn.classList.contains('fchip-on');
+    target.style.display=isOn?'flex':'none';
+    if(!isOn)clearFilterCtl(btn.dataset.target);
+  });
+});
 function match(r){
   if(S.partner){const p=S.partner.toLowerCase();
     if(!(r.nombre||'').toLowerCase().includes(p)&&!(r.partner_ms||'').toLowerCase().includes(p)) return false;}
+  if(S.modelo.length&&r.modelo){if(!S.modelo.includes(r.modelo))return false;}
+  if(S.marca.length&&r.marca){if(!S.marca.includes(r.marca))return false;}
+  if(S.pais.length&&r.country_oi){if(!S.pais.includes(r.country_oi))return false;}
+  if(S.campId){if(!String(r.ms_campaign_id||'').toLowerCase().includes(S.campId.toLowerCase()))return false;}
+  if(!matchDateFilter(r.fecha_inicio_campania,S.fechaInicio))return false;
+  if(!matchDateFilter(r.fecha_fin_campania,S.fechaFin))return false;
   return (!S.media.length||S.media.includes(r.media))&&
-    (!S.vertical.length||S.vertical.includes(r.ms_product)); }
+    (!S.vertical.length||S.vertical.includes(r.ms_product));
+}
 function filtered(){ return RAW.filter(match); }
 function filteredCtr(){ return RAW_CTR.filter(match); }
 
