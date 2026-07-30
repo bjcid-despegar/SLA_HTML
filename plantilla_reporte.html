@@ -66,6 +66,8 @@ header{background:linear-gradient(115deg,var(--brand-900),var(--brand-600) 60%,v
 
 /* multiselect */
 .ms{position:relative;min-width:210px}
+.filter-text{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  background:#fff;font-size:13px;font-family:inherit;color:var(--ink);outline:none;width:100%;box-sizing:border-box}
 .ms-btn{width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
   background:#fff;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;
   display:flex;justify-content:space-between;gap:8px}
@@ -267,6 +269,10 @@ body.locked{overflow:hidden}
         </div>
       </div>
       <div class="ctl">
+        <label>ID Campaña</label>
+        <input id="campIdFilter" class="filter-text" type="text" placeholder="Buscar ID…" style="min-width:160px">
+      </div>
+      <div class="ctl">
         <label>ABN</label>
         <div class="seg sm" id="abnSeg">
           <button data-v="Sí">Sí</button>
@@ -389,7 +395,7 @@ const SLA={
 let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
 let barChartDrill={}, activeChartDrill={}, campMonthDrill={};
 let modalRows=[], modalCols=[], modalName='detalle';
-const S={carga:[],media:[],vertical:[],abn:'No'};   // carga/media/vertical: [] = todos · abn: 'No' = sin reestructura
+const S={carga:[],media:[],vertical:[],abn:'No',campId:''};   // carga/media/vertical: [] = todos · abn: 'No' = sin reestructura
 const drill={};
 const promOpen={sla:false,ctr:false};   // pestaña "Promedios" (filas por miembro) colapsada por defecto
 
@@ -612,8 +618,11 @@ function buildFilters(){
   document.querySelectorAll('#slaSeg button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#slaSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
+  document.getElementById('campIdFilter').addEventListener('input',e=>{S.campId=e.target.value.trim();render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.vertical=[];S.abn='No'; mmCtl.reset(); mvCtl.reset(); rebuildCarga();
+    S.media=[];S.vertical=[];S.abn='No';S.campId='';
+    mmCtl.reset(); mvCtl.reset(); rebuildCarga();
+    document.getElementById('campIdFilter').value='';
     document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.toggle('active',x.dataset.v===S.abn));
     render();};
 }
@@ -627,6 +636,7 @@ function applyAbn(rows){
 
 function applyFilters(rows,opts={}){
   return applyAbn(rows).filter(r=>
+    (!S.campId||String(r.ms_campaign_id||'').toLowerCase().includes(S.campId.toLowerCase()))&&
     (!S.media.length||S.media.includes(r.media))&&
     (!S.vertical.length||S.vertical.includes(r.ms_product))&&
     (opts.carga===false||!S.carga.length||S.carga.includes(r.carga)));
