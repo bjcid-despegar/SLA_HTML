@@ -596,7 +596,7 @@ function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const marcas=[...new Set(RAW.map(r=>r.marca).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const paises=[...new Set([...RAW,...RAW_CTR].map(r=>r.country_oi).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const paises=[...new Set([...RAW,...RAW_CTR].map(r=>r.pais).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   S.media=[];S.vertical=[];S.modelo=[];S.marca=[];S.pais=[];S.partner='';S.campId='';
   S.fechaInicio={op:'',d1:'',d2:''};S.fechaFin={op:'',d1:'',d2:''};
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
@@ -623,7 +623,7 @@ function match(r){
     if(!(r.nombre||'').toLowerCase().includes(p)&&!(r.partner_ms||'').toLowerCase().includes(p)) return false;}
   if(S.modelo.length){const md=matchModel(r.modelo||'');if(!S.modelo.includes(md))return false;}
   if(S.marca.length&&!S.marca.includes(r.marca))return false;
-  if(S.pais.length&&!S.pais.includes(r.country_oi))return false;
+  if(S.pais.length&&!S.pais.includes(r.pais))return false;
   if(S.campId){if(!String(r.ms_campaign_id||'').toLowerCase().includes(S.campId.toLowerCase()))return false;}
   if(!matchDateFilter(r.fecha_inicio_campania,S.fechaInicio))return false;
   if(!matchDateFilter(r.fecha_fin_campania,S.fechaFin))return false;
@@ -635,7 +635,7 @@ function matchExcept(r,skip){
     if(!(r.nombre||'').toLowerCase().includes(p)&&!(r.partner_ms||'').toLowerCase().includes(p)) return false;}
   if(skip!=='modelo'&&S.modelo.length){const md=matchModel(r.modelo||'');if(!S.modelo.includes(md))return false;}
   if(skip!=='marca'&&S.marca.length&&!S.marca.includes(r.marca))return false;
-  if(skip!=='pais'&&S.pais.length&&!S.pais.includes(r.country_oi))return false;
+  if(skip!=='pais'&&S.pais.length&&!S.pais.includes(r.pais))return false;
   if(skip!=='campId'&&S.campId){if(!String(r.ms_campaign_id||'').toLowerCase().includes(S.campId.toLowerCase()))return false;}
   if(skip!=='fechaInicio'&&!matchDateFilter(r.fecha_inicio_campania,S.fechaInicio))return false;
   if(skip!=='fechaFin'&&!matchDateFilter(r.fecha_fin_campania,S.fechaFin))return false;
@@ -659,7 +659,7 @@ function updateFilterOptions(){
   const avail=new Set(all.filter(r=>matchExcept(r,'modelo')).map(r=>matchModel(r.modelo||'')).filter(Boolean));
   upd(mmModelo,'modelo',MODEL_ORDER.filter(m=>avail.has(m)));
   upd(mmMarca,'marca',[...new Set(RAW.filter(r=>matchExcept(r,'marca')).map(r=>r.marca).filter(Boolean))].sort(sort));
-  upd(mmPais,'pais',[...new Set(all.filter(r=>matchExcept(r,'pais')).map(r=>r.country_oi).filter(Boolean))].sort(sort));
+  upd(mmPais,'pais',[...new Set(all.filter(r=>matchExcept(r,'pais')).map(r=>r.pais).filter(Boolean))].sort(sort));
   _inUpdateOpts=false;
   if(needRender)render();
 }
