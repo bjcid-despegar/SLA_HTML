@@ -283,10 +283,9 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
         <label>Fecha Inicio</label>
         <div class="date-f">
           <select class="date-op" id="fioOp" onchange="onDateOpChange('fio')">
-            <option value="">Sin filtro</option>
+            <option value="eq" selected>Igual a</option>
             <option value="before">Antes de</option>
             <option value="after">Después de</option>
-            <option value="eq">Igual a</option>
             <option value="between">Entre</option>
           </select>
           <input type="date" class="date-in" id="fioD1" oninput="updateDateFilter('fio')">
@@ -297,10 +296,9 @@ table.raw thead th{background:var(--brand-050);color:var(--brand-700);position:s
         <label>Fecha Fin</label>
         <div class="date-f">
           <select class="date-op" id="ffiOp" onchange="onDateOpChange('ffi')">
-            <option value="">Sin filtro</option>
+            <option value="eq" selected>Igual a</option>
             <option value="before">Antes de</option>
             <option value="after">Después de</option>
-            <option value="eq">Igual a</option>
             <option value="between">Entre</option>
           </select>
           <input type="date" class="date-in" id="ffiD1" oninput="updateDateFilter('ffi')">
@@ -545,16 +543,22 @@ document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open'
 
 function parseISODate(s){
   if(!s)return null;
-  const m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  const str=String(s).trim();
+  /* DD/MM/YYYY */
+  const dmy=str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(dmy)return new Date(+dmy[3],+dmy[2]-1,+dmy[1]);
+  /* YYYY-MM-DD */
+  const iso=str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(iso)return new Date(+iso[1],+iso[2]-1,+iso[3]);
+  /* "D mes, YYYY" o "D mes YYYY" (formato CSV real) */
   const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
-  const nm=String(s).toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s*(\d{4})/);
-  if(nm)return new Date(+nm[2],MESES[nm[1]]-1,1);
+  const nm=str.toLowerCase().match(/(\d{1,2})\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre),?\s*(\d{4})/);
+  if(nm)return new Date(+nm[3],MESES[nm[2]]-1,+nm[1]);
   return null;
 }
 function matchDateFilter(val,st){
   if(!st||!st.op||!st.d1)return true;
-  const fd=parseISODate(val); if(!fd)return true;
+  const fd=parseISODate(val); if(!fd)return false;
   const d1=new Date(st.d1+'T00:00:00');
   if(st.op==='before') return fd<d1;
   if(st.op==='after')  return fd>d1;
@@ -596,7 +600,8 @@ function buildFilters(){
     S.fechaInicio={op:'',d1:'',d2:''};S.fechaFin={op:'',d1:'',d2:''};
     document.getElementById('partnerFilter').value='';
     document.getElementById('campIdFilter').value='';
-    ['fioOp','fioD1','fioD2','ffiOp','ffiD1','ffiD2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('fioOp').value='eq'; document.getElementById('fioD1').value=''; document.getElementById('fioD2').value='';
+    document.getElementById('ffiOp').value='eq'; document.getElementById('ffiD1').value=''; document.getElementById('ffiD2').value='';
     document.getElementById('fioD2').style.display='none';
     document.getElementById('ffiD2').style.display='none';
     mmCtl.reset();mvCtl.reset();mmModelo.reset();mmMarca.reset();mmPais.reset();render();};
@@ -932,11 +937,13 @@ function clearFilterCtl(id){
     case 'fctlPais':         S.pais=[];     if(mmPais)mmPais.reset();   break;
     case 'fctlPartner':      S.partner='';  const pf=document.getElementById('partnerFilter');if(pf)pf.value=''; break;
     case 'fctlCampId':       S.campId='';   const cf=document.getElementById('campIdFilter');if(cf)cf.value=''; break;
-    case 'fctlFechaInicio':  S.fechaInicio={op:'',d1:'',d2:''};
-      ['fioOp','fioD1','fioD2'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+    case 'fctlFechaInicio':  S.fechaInicio={op:'eq',d1:'',d2:''};
+      document.getElementById('fioOp').value='eq';
+      document.getElementById('fioD1').value=''; document.getElementById('fioD2').value='';
       document.getElementById('fioD2').style.display='none'; break;
-    case 'fctlFechaFin':     S.fechaFin={op:'',d1:'',d2:''};
-      ['ffiOp','ffiD1','ffiD2'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+    case 'fctlFechaFin':     S.fechaFin={op:'eq',d1:'',d2:''};
+      document.getElementById('ffiOp').value='eq';
+      document.getElementById('ffiD1').value=''; document.getElementById('ffiD2').value='';
       document.getElementById('ffiD2').style.display='none'; break;
   }
   render();
