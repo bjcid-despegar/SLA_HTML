@@ -796,9 +796,6 @@ function renderBar(rows){
     backgroundColor:PALETTE[0],borderRadius:4,maxBarThickness:46}];
   const allVals=months.map(cnt).filter(x=>x>0);
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
-  datasets.push({type:'line',label:'Promedio de campañas',
-    data:months.map(()=>avg),borderColor:'#dc2626',borderWidth:2,borderDash:[6,5],
-    pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:0});
   const slaMonth={};
   rows.forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
     (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);});
@@ -807,19 +804,26 @@ function renderBar(rows){
     borderColor:'#1e1b2e',backgroundColor:'#1e1b2e',borderWidth:2,
     pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#1e1b2e',pointBorderColor:'#fff',pointBorderWidth:1,
     fill:false,tension:.3,spanGaps:true,order:0});
+  datasets.push({type:'line',label:'Target SLA Ratio',yAxisID:'y1',
+    data:months.map(()=>95),borderColor:'rgba(220,38,38,0.80)',backgroundColor:'rgba(220,38,38,0.80)',
+    borderWidth:2,borderDash:[6,5],pointRadius:0,pointHitRadius:0,fill:false,tension:0,order:0});
   if(chart)chart.destroy();
-  const endLabel={id:'endLabel',afterDatasetsDraw(c){
-    const di=c.data.datasets.findIndex(d=>d.type==='line'&&!d.isSlaRatio); if(di<0)return;
-    const pts=c.getDatasetMeta(di).data; if(!pts.length)return;
-    const p=pts[pts.length-1],ctx=c.ctx,txt=avg.toFixed(1);
+  const target95Label={id:'target95Label',afterDraw(c){
+    const sc=c.scales.y1; if(!sc)return;
+    const di=c.data.datasets.findIndex(d=>d.label==='Target SLA Ratio');
+    if(di<0||c.getDatasetMeta(di).hidden)return;
+    const y=sc.getPixelForValue(95), ctx=c.ctx;
+    const pts=c.getDatasetMeta(di).data;
+    if(pts.length){
+      ctx.save();
+      ctx.strokeStyle='rgba(220,38,38,0.80)';ctx.lineWidth=2;
+      ctx.setLineDash([6,5]);
+      ctx.beginPath();ctx.moveTo(pts[pts.length-1].x,y);ctx.lineTo(sc.left,y);ctx.stroke();
+      ctx.restore();}
     ctx.save();
-    ctx.font='bold 12px Segoe UI';ctx.textBaseline='middle';
-    const w=ctx.measureText(txt).width;
-    let x=p.x+8,align='left';
-    if(x+w+6>c.chartArea.right){x=p.x-8;align='right';}
-    ctx.textAlign=align;
-    ctx.fillStyle='#fff';ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.strokeText(txt,x,p.y-9);
-    ctx.fillStyle='#b91c1c';ctx.fillText(txt,x,p.y-9);
+    ctx.font='bold 9px Segoe UI';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillStyle='rgba(220,38,38,0.80)';
+    ctx.fillText('95%',sc.left+5,y);
     ctx.restore();}};
   const slaLabels={id:'slaLabels',afterDatasetsDraw(c){
     const di=c.data.datasets.findIndex(d=>d.isSlaRatio); if(di<0)return;
@@ -840,13 +844,13 @@ function renderBar(rows){
         tooltip:{callbacks:{
           label:c=>{
             if(c.dataset.isSlaRatio) return 'SLA Ratio: '+(c.parsed.y==null?'–':(+c.parsed.y).toFixed(1)+'%');
-            if(c.dataset.type==='line') return 'Promedio de campañas: '+(+c.parsed.y).toFixed(1);
+            if(c.dataset.label==='Target SLA Ratio') return 'Target SLA Ratio: 95%';
             return c.parsed.y+' campañas';}}}},
       scales:{x:{grid:{display:false}},
               y:{beginAtZero:true,ticks:{precision:0},grid:{color:'#ece8f6'},title:{display:true,text:'Número de Campañas'}},
               y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false},
                   ticks:{callback:v=>v+'%'},title:{display:true,text:'SLA Ratio (%)'}}}},
-    plugins:[endLabel,slaLabels]});
+    plugins:[slaLabels,target95Label]});
 }
 
 function matchModel(md){return MODEL_ORDER.find(x=>x.toLowerCase()===md.toLowerCase())||md;}
