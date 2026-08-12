@@ -399,6 +399,8 @@ const drill={};
 const norm=s=>(s==null?'':String(s)).trim();
 const placementKey=r=>[r.ms_campaign_id,r.media,r.pais,r.marca].join('|');
 const countPlacements=rows=>new Set(rows.map(placementKey)).size;
+const parseDateVal=s=>{if(!s)return Infinity;const iso=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);if(iso)return+iso[1]*10000+(+iso[2])*100+(+iso[3]);const dmy=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(dmy)return+dmy[3]*10000+(+dmy[2])*100+(+dmy[1]);return Infinity;};
+function slaRowsForChart(rows){const map=new Map();rows.forEach(r=>{const mo=implMonth(r);if(mo==null)return;const k=mo+'|'+placementKey(r);const cur=map.get(k);if(!cur||parseDateVal(r.primera_impresion)<parseDateVal(cur.primera_impresion))map.set(k,r);});return[...map.values()];}
 const numOrNull=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?null:x;};
 const key=s=>norm(s).toLowerCase();
 const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
@@ -709,15 +711,16 @@ const fmtPct=(x,d=1)=>x==null?'–':(x*100).toFixed(d)+'%';
 function renderCards(rows){
   const camps=new Set(rows.map(r=>r.ms_campaign_id).filter(Boolean)).size;
   const places=countPlacements(rows);
-  const slaProm=mean(rows.map(r=>r.sla).filter(v=>v!=null));
-  const ok=rows.map(r=>r.sla_ok).filter(v=>v!=null);
+  const uniq=slaRowsForChart(rows);
+  const slaProm=mean(uniq.map(r=>r.sla).filter(v=>v!=null));
+  const ok=uniq.map(r=>r.sla_ok).filter(v=>v!=null);
   const slaRatio=mean(ok);
   const single=(k,v,s,c)=>`<div class="card" style="border-top-color:${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   document.getElementById('cards').innerHTML=
     single('Campañas',camps.toLocaleString('es-MX'),'IDs únicos de campaña','var(--brand-500)')+
     single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
     single('SLA promedio',slaProm==null?'–':slaProm.toFixed(1),'días · valor medio del campo sla','var(--brand-700)')+
-    single('SLA ratio',fmtPct(slaRatio),ok.length+' casos (% cumplimiento)','var(--orange)');
+    single('SLA ratio',fmtPct(slaRatio),'','var(--orange)');
 }
 
 function implMonth(r){
@@ -797,7 +800,7 @@ function renderBar(rows){
   const allVals=months.map(cnt).filter(x=>x>0);
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
   const slaMonth={};
-  rows.forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
+  slaRowsForChart(rows).forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
     (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);});
   datasets.push({type:'line',label:'SLA Ratio',isSlaRatio:true,yAxisID:'y1',
     data:months.map(mo=>{const v=mean(slaMonth[mo]||[]);return v==null?null:+(v*100).toFixed(1);}),

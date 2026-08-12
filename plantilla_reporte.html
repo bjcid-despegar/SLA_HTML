@@ -420,6 +420,8 @@ function slaRows(rows){
   rows.forEach(r=>{const k=placementKey(r); if(!byKey.has(k)) byKey.set(k,r);});
   return [...byKey.values()];
 }
+const parseDateVal=s=>{if(!s)return Infinity;const iso=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/);if(iso)return+iso[1]*10000+(+iso[2])*100+(+iso[3]);const dmy=String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(dmy)return+dmy[3]*10000+(+dmy[2])*100+(+dmy[1]);return Infinity;};
+function slaRowsForChart(rows){const map=new Map();rows.forEach(r=>{const mo=implMonth(r);if(mo==null)return;const k=mo+'|'+placementKey(r);const cur=map.get(k);if(!cur||parseDateVal(r.primera_impresion)<parseDateVal(cur.primera_impresion))map.set(k,r);});return[...map.values()];}
 const numOrNull=v=>{const x=parseFloat(String(v).replace(',','.'));return isNaN(x)?null:x;};
 /* Conteos enteros (clicks, shows): elimina separadores de miles (, . ó espacio) antes de parsear */
 const numCount=v=>{const s=String(v==null?'':v).replace(/[^\d-]/g,'');return s===''?null:parseInt(s,10);};
@@ -755,7 +757,7 @@ function renderCards(rows,ctrRows){
   /* Campañas, placements y SLA salen de la base modelo_base_camp.csv (rows). */
   const camps=new Set(rows.map(r=>r.ms_campaign_id).filter(Boolean)).size;
   const places=countPlacements(rows);
-  const uniq=slaRows(rows);   // un registro por placement
+  const uniq=slaRowsForChart(rows);
   const slaProm=mean(uniq.map(r=>r.sla).filter(v=>v!=null));
   const ok=uniq.map(r=>r.sla_ok).filter(v=>v!=null);
   const slaRatio=mean(ok);
@@ -772,8 +774,8 @@ function renderCards(rows,ctrRows){
     single('Campañas',camps.toLocaleString('es-MX'),'IDs únicos de campaña','var(--brand-500)')+
     single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
     single('SLA promedio',slaProm==null?'–':slaProm.toFixed(1),'días · valor medio del campo sla','var(--brand-700)')+
-    single('SLA ratio',fmtPct(slaRatio),ok.length+' casos (% cumplimiento)','var(--orange)')+
-    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%',ctrPlaces+' placements','var(--teal)');
+    single('SLA ratio',fmtPct(slaRatio),'','var(--orange)')+
+    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%','','var(--teal)');
 }
 
 function implMonth(r){
@@ -806,7 +808,7 @@ function renderBar(rows){
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
   /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) + desglose por miembro */
   const slaMonth={},slaMemMonth={};
-  slaRows(rows).forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
+  slaRowsForChart(rows).forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
     (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);
     if(r.carga){slaMemMonth[r.carga]=slaMemMonth[r.carga]||{};
       (slaMemMonth[r.carga][mo]=slaMemMonth[r.carga][mo]||[]).push(r.sla_ok);}});

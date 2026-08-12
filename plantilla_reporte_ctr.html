@@ -702,7 +702,7 @@ function renderCards(rows,ctrRows){
   document.getElementById('cards').innerHTML=
     single('Campañas activas',campLabel,momTxt,'var(--brand-500)')+
     single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
-    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%',ctrPlaces+' placements','var(--teal)');
+    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%','','var(--teal)');
 }
 
 function implMonth(r){
