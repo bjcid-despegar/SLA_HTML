@@ -520,19 +520,21 @@ function makeMulti(root,values,onChange){
         panel=root.querySelector('.ms-panel'), box=root.querySelector('.ms-opts'),
         allCb=root.querySelector('.ms-all');
   const origVals=[...values];
-  let vals=[...values], sel=new Set(vals);
+  let vals=[...values], sel=new Set(vals), isAll=true;
   function wireOpts(){
     box.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
+      isAll=false;
       cb.checked?sel.add(cb.dataset.v):sel.delete(cb.dataset.v);
       allCb.checked=sel.size===vals.length; emit();});}
   function buildOpts(){
     box.innerHTML=vals.map(v=>`<label><input type="checkbox" data-v="${esc(v)}"${sel.has(v)?' checked':''}> ${esc(v)}</label>`).join('');
     wireOpts();}
-  const text=()=>(sel.size===vals.length||sel.size===0)?'Todos':(sel.size===1?[...sel][0]:sel.size+' seleccionados');
+  const text=()=>(isAll||sel.size===0)?'Todos':(sel.size===1?[...sel][0]:sel.size+' seleccionados');
   const upd=()=>lbl.textContent=text();
-  const emit=()=>{upd();onChange(sel.size===vals.length?[]:[...sel]);};
+  const emit=()=>{upd();onChange(isAll?[]:[...sel]);};
   buildOpts(); allCb.checked=true;
   allCb.onchange=()=>{
+    isAll=allCb.checked;
     sel=allCb.checked?new Set(vals):new Set();
     box.querySelectorAll('input').forEach(c=>c.checked=allCb.checked); emit();};
   btn.onclick=e=>{e.stopPropagation();
@@ -541,13 +543,13 @@ function makeMulti(root,values,onChange){
   panel.onclick=e=>e.stopPropagation();
   upd();
   return {
-    reset(){vals=[...origVals];sel=new Set(vals);allCb.checked=true;buildOpts();upd();},
+    reset(){isAll=true;vals=[...origVals];sel=new Set(vals);allCb.checked=true;buildOpts();upd();},
     update(newVals){
-      const wasAll=sel.size===vals.length;
       vals=newVals;
-      sel=wasAll?new Set(vals):new Set([...sel].filter(v=>vals.includes(v)));
+      if(isAll){sel=new Set(vals);}
+      else{const prev=[...sel];sel=new Set(prev.filter(v=>vals.includes(v)));if(!sel.size&&prev.length){sel=new Set(vals);isAll=true;}}
       buildOpts(); allCb.checked=sel.size===vals.length; upd();
-      return sel.size===vals.length?[]:[...sel];}
+      return isAll?[]:[...sel];}
   };
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
