@@ -269,6 +269,16 @@ body.locked{overflow:hidden}
         </div>
       </div>
       <div class="ctl">
+        <label>Filtro · Basecamp</label>
+        <div class="ms" id="msBasecamp">
+          <button type="button" class="ms-btn"><span class="ms-lbl">Todos</span><span>▾</span></button>
+          <div class="ms-panel">
+            <label class="ms-allrow"><input type="checkbox" class="ms-all"> Seleccionar todos</label>
+            <div class="ms-opts"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ctl">
         <label>ID Campaña</label>
         <input id="campIdFilter" class="filter-text" type="text" placeholder="Buscar ID…" style="min-width:160px">
       </div>
@@ -395,7 +405,7 @@ const SLA={
 let RAW=[], RAW_CTR=[], chart=null, chart2=null, slaMetric='dias';
 let barChartDrill={}, activeChartDrill={}, campMonthDrill={};
 let modalRows=[], modalCols=[], modalName='detalle';
-const S={carga:[],media:[],vertical:[],abn:'No',campId:''};   // carga/media/vertical: [] = todos · abn: 'No' = sin reestructura
+const S={carga:[],media:[],vertical:[],basecamp:[],abn:'No',campId:''};   // carga/media/vertical/basecamp: [] = todos · abn: 'No' = sin reestructura
 const drill={};
 const promOpen={sla:false,ctr:false};   // pestaña "Promedios" (filas por miembro) colapsada por defecto
 
@@ -546,7 +556,8 @@ function parseCsv(text,req){
     fecha_implementacion:norm(r.fecha_implementacion),anio:norm(r.anio),anio_evento:norm(r.anio_evento),mes:parseInt(r.mes,10),
     semana:norm(r.semana),primera_impresion:norm(r.primera_impresion),primera_imp_mes:norm(r.primera_imp_mes),sla:numOrNull(r.sla),
     fecha_inicio_campania:norm(r.fecha_inicio_campania),fecha_fin_campania:norm(r.fecha_fin_campania),monto:norm(r.monto),modelo:norm(r.modelo),
-    estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok)
+    estado:norm(r.estado),carga:norm(r.carga),abn:norm(r.abn),marca:norm(r.marca),sla_ok:numOrNull(r.sla_ok),
+    basecamp:norm(r.basecamp)
   }));
   const yr=r=>{const s=r.anio+' '+r.fecha_implementacion+' '+r.fecha_negociada;
     const m=s.match(/\b(20\d{2})\b/);return m?m[1]:'';};
@@ -594,7 +605,7 @@ function makeMulti(root,values,onChange){
 }
 document.addEventListener('click',()=>document.querySelectorAll('.ms-panel.open').forEach(p=>p.classList.remove('open')));
 
-let mmCtl=null, mvCtl=null;
+let mmCtl=null, mvCtl=null, mbCtl=null;
 /* Lista de cargas según la reestructura ABN vigente (incluye "ABN" cuando está en Sí) */
 function cargaList(){
   return [...new Set(applyAbn(RAW).map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
@@ -607,10 +618,12 @@ function rebuildCarga(){
 function buildFilters(){
   const medias=[...new Set(RAW.map(r=>r.media).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   const verticals=[...new Set(RAW.map(r=>r.ms_product).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  S.carga=[];S.media=[];S.vertical=[];S.abn='No';
+  const basecamps=[...new Set([...RAW,...RAW_CTR].map(r=>r.basecamp).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  S.carga=[];S.media=[];S.vertical=[];S.basecamp=[];S.abn='No';
   rebuildCarga();
   mmCtl=makeMulti(document.getElementById('msMedia'),medias,a=>{S.media=a;render();});
   mvCtl=makeMulti(document.getElementById('msVertical'),verticals,a=>{S.vertical=a;render();});
+  mbCtl=makeMulti(document.getElementById('msBasecamp'),basecamps,a=>{S.basecamp=a;render();});
   document.querySelectorAll('#abnSeg button').forEach(b=>{
     b.classList.toggle('active',b.dataset.v===S.abn);
     b.onclick=()=>{
@@ -622,8 +635,8 @@ function buildFilters(){
     b.classList.add('active'); slaMetric=b.dataset.v; render();});
   document.getElementById('campIdFilter').addEventListener('input',e=>{S.campId=e.target.value.trim();render();});
   document.getElementById('reset').onclick=()=>{
-    S.media=[];S.vertical=[];S.abn='No';S.campId='';
-    mmCtl.reset(); mvCtl.reset(); rebuildCarga();
+    S.media=[];S.vertical=[];S.basecamp=[];S.abn='No';S.campId='';
+    mmCtl.reset(); mvCtl.reset(); mbCtl.reset(); rebuildCarga();
     document.getElementById('campIdFilter').value='';
     document.querySelectorAll('#abnSeg button').forEach(x=>x.classList.toggle('active',x.dataset.v===S.abn));
     render();};
@@ -641,6 +654,7 @@ function applyFilters(rows,opts={}){
     (!S.campId||String(r.ms_campaign_id||'').toLowerCase().includes(S.campId.toLowerCase()))&&
     (!S.media.length||S.media.includes(r.media))&&
     (!S.vertical.length||S.vertical.includes(r.ms_product))&&
+    (!S.basecamp.length||S.basecamp.includes(r.basecamp))&&
     (opts.carga===false||!S.carga.length||S.carga.includes(r.carga)));
 }
 function filtered(opts={}){ return applyFilters(RAW,opts); }        // base de SLA / conteos
