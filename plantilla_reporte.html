@@ -562,7 +562,14 @@ function parseCsv(text,req){
   const yr=r=>{const s=r.anio+' '+r.fecha_implementacion+' '+r.fecha_negociada;
     const m=s.match(/\b(20\d{2})\b/);return m?m[1]:'';};
   const finOk=r=>{const m=(r.fecha_fin_campania||'').match(/\b(20\d{2})\b/);return !m||parseInt(m[1])>=2026;};
-  return {rows:clean.filter(r=>yr(r)!=='2025'&&finOk(r)),
+  const yearNum=s=>{const n=parseInt(String(s||'').replace(/[^\d]/g,''),10);return isNaN(n)?null:n;};
+  /* anio_evento (año real del primera_impresion) no puede ser anterior a anio (año de
+     fecha_implementacion); si lo fuera, la fila es un evento viejo "colado" bajo un
+     anio más nuevo (p.ej. un registro de dic/2025 bajo un contrato de 2026). Se
+     preservan los casos donde el evento es igual o posterior (campaña que arrancó en
+     2026 y sigue con implementaciones en 2027). */
+  const anioEventoOk=r=>{const ae=yearNum(r.anio_evento),a=yearNum(r.anio);return ae==null||a==null||ae>=a;};
+  return {rows:clean.filter(r=>yr(r)!=='2025'&&finOk(r)&&anioEventoOk(r)),
           years:[...new Set(clean.map(yr))].filter(Boolean).sort(), read:clean.length};
 }
 function parseMain(text){
