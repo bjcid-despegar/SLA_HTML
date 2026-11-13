@@ -200,7 +200,7 @@ body.locked{overflow:hidden}
     <div class="head-meta">
       <div id="stamp"></div>
       <div class="head-actions">
-        <button class="btn btn-light" onclick="window.print()">⬇ Guardar / Imprimir PDF</button>
+        <button class="btn btn-light" onclick="downloadSlaFailed()">⬇ SLA fallidos (CSV)</button>
       </div>
     </div>
   </div>
@@ -1236,6 +1236,14 @@ document.getElementById('activeChart').addEventListener('dblclick',e=>{
   if(!d||!d.rows.length){toast('Sin registros para esta barra');return;}
   openModalDirect(d.title,dedupByCampaign(d.rows),'sla',COLS_CAMPAIGN);
 });
+function downloadSlaFailed(){
+  const failed=RAW.filter(r=>r.sla_ok===0).map(({anio_evento,primera_imp_mes,...r})=>r);
+  if(!failed.length){toast('No hay registros con sla_ok = 0',true);return;}
+  const csv='﻿'+Papa.unparse(failed);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download='sla_failed.csv';a.click();URL.revokeObjectURL(a.href);
+  toast(failed.length+' registros descargados en sla_failed.csv');
+}
 function exportModal(){
   const csv=Papa.unparse(modalRows.map(r=>{const o={};modalCols.forEach(c=>o[c]=r[c]);return o;}));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
