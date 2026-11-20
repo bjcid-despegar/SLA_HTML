@@ -200,7 +200,7 @@ body.locked{overflow:hidden}
     <div class="head-meta">
       <div id="stamp"></div>
       <div class="head-actions">
-        <button class="btn btn-light" onclick="downloadSlaFailed()">⬇ SLA fallidos (CSV)</button>
+        <button class="btn btn-light" onclick="downloadSlaFailed()">⬇ SLAs (CSV)</button>
       </div>
     </div>
   </div>
@@ -775,28 +775,55 @@ const fmtPct=(x,d=1)=>x==null?'–':(x*100).toFixed(d)+'%';
 const fmtCtr=x=>x==null?'–':x.toFixed(2);
 
 function renderCards(rows,ctrRows){
-  /* Campañas, placements y SLA salen de la base modelo_base_camp.csv (rows). */
-  const camps=new Set(rows.map(r=>r.ms_campaign_id).filter(Boolean)).size;
-  const places=countPlacements(rows);
-  const uniq=slaRowsForChart(rows);
-  const slaProm=mean(uniq.map(r=>r.sla).filter(v=>v!=null));
-  const ok=uniq.map(r=>r.sla_ok).filter(v=>v!=null);
-  const slaRatio=mean(ok);
-  /* CTR global: sale de la base modelo_base_camp_ctr.csv (ctrRows), sumando todas
-     las filas placement-mes. Fórmula Σclicks/Σshows×100, con numCount para
-     descartar separadores de miles. No es un promedio de promedios. */
-  let ctrCs=0,ctrSs=0;
-  ctrRows.forEach(r=>{const c=numCount(r.clicks),s=numCount(r.shows);
-    if(c!=null&&s!=null){ctrCs+=c;ctrSs+=s;}});
-  const ctrProm=ctrSs>0?ctrCs/ctrSs*100:null;
-  const ctrPlaces=countPlacements(ctrRows);
-  const single=(k,v,s,c)=>`<div class="card" style="border-top-color:${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  /* Cards = mes actual vs mes anterior. "Mes actual" = último mes con datos reales
+     (mismo criterio que el gráfico: con carga o sla_ok), "anterior" = el mes previo con datos.
+     Campañas, placements y SLA salen de modelo_base_camp.csv (rows, por mes de
+     implementación); CTR de modelo_base_camp_ctr.csv (ctrRows, por primera_imp_mes). */
+  const moData=r=>{const mo=implMonth(r);return mo!=null&&(r.carga||r.sla_ok!=null)?mo:null;};
+  const mos=[...new Set(rows.map(moData).filter(m=>m!=null))].sort((a,b)=>b-a);
+  const cur=mos[0], prev=mos[1];
+  const slaCalc=mo=>{
+    if(mo==null)return null;
+    const rs=rows.filter(r=>implMonth(r)===mo), uniq=slaRowsForChart(rs);
+    return {camps:new Set(rs.map(r=>r.ms_campaign_id).filter(Boolean)).size,
+            places:countPlacements(rs),
+            dias:mean(uniq.map(r=>r.sla).filter(v=>v!=null)),
+            ratio:mean(uniq.map(r=>r.sla_ok).filter(v=>v!=null))};
+  };
+  /* CTR: Σclicks/Σshows×100 del mes (no es promedio de promedios) */
+  const cmos=[...new Set(ctrRows.map(firstImpMonth).filter(m=>m!=null))].sort((a,b)=>b-a);
+  const ccur=cmos[0], cprev=cmos[1];
+  const ctrCalc=mo=>{
+    if(mo==null)return null;
+    let cs=0,ss=0;
+    ctrRows.filter(r=>firstImpMonth(r)===mo).forEach(r=>{const c=numCount(r.clicks),s=numCount(r.shows);
+      if(c!=null&&s!=null){cs+=c;ss+=s;}});
+    return ss>0?cs/ss*100:null;
+  };
+  const a=slaCalc(cur), b=slaCalc(prev), ca=ctrCalc(ccur), cb=ctrCalc(cprev);
+  /* delta: mode 'pct' (variación %), 'abs' (diferencia), 'pp' (puntos porcentuales);
+     goodUp indica si subir es mejor (en SLA días, bajar es mejor) */
+  const delta=(cv,pv,mode,goodUp,unit,dec)=>{
+    if(cv==null||pv==null)return null;
+    let d=mode==='pct'?(pv?(cv-pv)/pv*100:null):cv-pv;
+    if(d==null)return null;
+    const up=d>0, zero=Math.abs(d)<Math.pow(10,-dec)/2;
+    const col=zero?'':(up===goodUp?'color:var(--ok-tx)':'color:var(--bad-tx)');
+    return `<span style="${col};font-weight:700">${zero?'■ ':(up?'▲ +':'▼ −')}${Math.abs(d).toFixed(dec)}${unit}</span>`;
+  };
+  const card=(k,mo,pmo,cv,pv,fmt,dl,c)=>{
+    const sub=mo==null?'sin datos':
+      (pmo==null?'sin mes anterior':`${dl||'–'} vs ${MES[pmo]} (${pv==null?'–':fmt(pv)})`);
+    return `<div class="card" style="border-top-color:${c}"><div class="k">${k}${mo!=null?' · '+(MES[mo]||mo):''}</div>`+
+      `<div class="v">${cv==null?'–':fmt(cv)}</div><div class="s">${sub}</div></div>`;
+  };
+  const int=v=>v.toLocaleString('es-MX');
   document.getElementById('cards').innerHTML=
-    single('Campañas',camps.toLocaleString('es-MX'),'IDs únicos de campaña','var(--brand-500)')+
-    single('Placements',places.toLocaleString('es-MX'),'placements únicos','var(--brand-600)')+
-    single('SLA promedio',slaProm==null?'–':slaProm.toFixed(1),'días · valor medio del campo sla','var(--brand-700)')+
-    single('SLA ratio',fmtPct(slaRatio),'','var(--orange)')+
-    single('CTR promedio',ctrProm==null?'–':ctrProm.toFixed(2)+'%','','var(--teal)');
+    card('Campañas',cur,prev,a&&a.camps,b&&b.camps,int,a&&b?delta(a.camps,b.camps,'pct',true,'%',1):null,'var(--brand-500)')+
+    card('Placements',cur,prev,a&&a.places,b&&b.places,int,a&&b?delta(a.places,b.places,'pct',true,'%',1):null,'var(--brand-600)')+
+    card('SLA promedio',cur,prev,a&&a.dias,b&&b.dias,v=>v.toFixed(1)+' d',a&&b?delta(a.dias,b.dias,'abs',false,' d',1):null,'var(--brand-700)')+
+    card('SLA ratio',cur,prev,a&&a.ratio,b&&b.ratio,v=>fmtPct(v),a&&b&&a.ratio!=null&&b.ratio!=null?delta(a.ratio*100,b.ratio*100,'abs',true,' pp',1):null,'var(--orange)')+
+    card('CTR promedio',ccur,cprev,ca,cb,v=>v.toFixed(2)+'%',delta(ca,cb,'abs',true,' pp',2),'var(--teal)');
 }
 
 function implMonth(r){
@@ -819,7 +846,17 @@ function renderBar(rows){
     byMM[r.carga]=byMM[r.carga]||{};
     (byMM[r.carga][mo]=byMM[r.carga][mo]||new Set()).add(r.ms_campaign_id);});
   const members=Object.keys(byMM).sort((a,b)=>a.localeCompare(b,'es'));
-  const months=[...new Set(rows.map(implMonth).filter(m=>m!=null))].sort((a,b)=>a-b);
+  /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) + desglose por miembro */
+  const slaMonth={},slaMemMonth={};
+  slaRowsForChart(rows).forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
+    (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);
+    if(r.carga){slaMemMonth[r.carga]=slaMemMonth[r.carga]||{};
+      (slaMemMonth[r.carga][mo]=slaMemMonth[r.carga][mo]||[]).push(r.sla_ok);}});
+  /* Solo meses con datos reales (campañas asignadas o SLA Ratio): un mes nuevo aparece
+     recién cuando tiene registros asignados, no cuando solo hay implementaciones futuras. */
+  const monthsWithData=new Set([...Object.values(byMM).flatMap(o=>Object.keys(o).map(Number)),
+                                ...Object.keys(slaMonth).map(Number)]);
+  const months=[...monthsWithData].sort((a,b)=>a-b);
   const cnt=(mem,mo)=>(byMM[mem][mo]?byMM[mem][mo].size:0);
   const datasets=members.map((mem,i)=>({label:mem,
     data:months.map(mo=>cnt(mem,mo)),
@@ -827,12 +864,6 @@ function renderBar(rows){
   const allVals=[];
   members.forEach(mem=>months.forEach(mo=>{const x=cnt(mem,mo);if(x>0)allVals.push(x);}));
   const avg=allVals.length?allVals.reduce((a,b)=>a+b,0)/allVals.length:0;
-  /* SLA Ratio por mes (sla_ok = 1 cumplió / 0 no) + desglose por miembro */
-  const slaMonth={},slaMemMonth={};
-  slaRowsForChart(rows).forEach(r=>{const mo=implMonth(r); if(mo==null||r.sla_ok==null)return;
-    (slaMonth[mo]=slaMonth[mo]||[]).push(r.sla_ok);
-    if(r.carga){slaMemMonth[r.carga]=slaMemMonth[r.carga]||{};
-      (slaMemMonth[r.carga][mo]=slaMemMonth[r.carga][mo]||[]).push(r.sla_ok);}});
   const slaMembers=Object.keys(slaMemMonth).sort((a,b)=>a.localeCompare(b,'es'));
   datasets.push({type:'line',label:'SLA Ratio',isSlaRatio:true,yAxisID:'y1',
     data:months.map(mo=>{const v=mean(slaMonth[mo]||[]);return v==null?null:+(v*100).toFixed(1);}),
@@ -1030,10 +1061,27 @@ function cellVal(kind,arr){
 function renderPivot(kind,rows){
   /* CTR se agrupa por mes de primera_imp_mes; SLA por mes de implementación */
   const moOf=kind==='ctr'?firstImpMonth:(r=>r.mes);
-  const months=[...new Set(rows.map(moOf).filter(m=>m!=null&&!isNaN(m)))].sort((a,b)=>a-b);
+  let months=[...new Set(rows.map(moOf).filter(m=>m!=null&&!isNaN(m)))].sort((a,b)=>a-b);
   const tree={};
   rows.forEach(r=>{const c=r.carga||'(sin carga)',md=r.modelo||'(sin modelo)',me=r.media||'(sin media)';
     tree[c]=tree[c]||{};tree[c][md]=tree[c][md]||{};(tree[c][md][me]=tree[c][md][me]||[]).push(r);});
+  /* SLA: solo se muestran filas (carga/modelo/media) y meses que tengan algún valor;
+     lo que no tiene datos (p.ej. "(sin carga)" todo en "–") no aparece. */
+  if(kind==='sla'){
+    const usedMonths=new Set();
+    Object.keys(tree).forEach(c=>{
+      Object.keys(tree[c]).forEach(md=>{
+        Object.keys(tree[c][md]).forEach(me=>{
+          const arr=tree[c][md][me];
+          if(cellVal('sla',arr)==null){delete tree[c][md][me];return;}
+          months.forEach(mo=>{if(cellVal('sla',arr.filter(r=>moOf(r)===mo))!=null)usedMonths.add(mo);});
+        });
+        if(!Object.keys(tree[c][md]).length)delete tree[c][md];
+      });
+      if(!Object.keys(tree[c]).length)delete tree[c];
+    });
+    months=months.filter(m=>usedMonths.has(m));
+  }
   const cargas=Object.keys(tree).sort((a,b)=>a.localeCompare(b,'es'));
   const rank=m=>{const i=MODEL_ORDER.findIndex(x=>x.toLowerCase()===m.toLowerCase());return i<0?99:i;};
 
@@ -1077,7 +1125,8 @@ function renderPivot(kind,rows){
    modelo_base_camp_ctr.csv). No es promedio de promedios: reagrega sobre las filas.
    dimCols = nº de columnas de dimensión que ocupa la etiqueta. */
 function memberRows(kind,rows,moOf,months,dimCols){
-  const cargas=[...new Set(rows.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const cargas=[...new Set(rows.map(r=>r.carga).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
+    .filter(ca=>kind!=='sla'||cellVal('sla',rows.filter(r=>r.carga===ca))!=null);
   const cell=(arr,ca,mo)=>{
     const cellRows=kind==='sla'?slaRows(arr):arr;
     const k=`${kind}|${ca}|—|—|${mo}`; drill[k]=cellRows;
@@ -1237,12 +1286,12 @@ document.getElementById('activeChart').addEventListener('dblclick',e=>{
   openModalDirect(d.title,dedupByCampaign(d.rows),'sla',COLS_CAMPAIGN);
 });
 function downloadSlaFailed(){
-  const failed=RAW.filter(r=>r.sla_ok===0).map(({anio_evento,primera_imp_mes,...r})=>r);
-  if(!failed.length){toast('No hay registros con sla_ok = 0',true);return;}
-  const csv='﻿'+Papa.unparse(failed);
+  const recs=RAW.filter(r=>r.sla_ok===0||r.sla_ok===1).map(({anio_evento,primera_imp_mes,...r})=>r);
+  if(!recs.length){toast('No hay registros con sla_ok = 0 ó 1',true);return;}
+  const csv='﻿'+Papa.unparse(recs);
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
-  a.download='sla_failed.csv';a.click();URL.revokeObjectURL(a.href);
-  toast(failed.length+' registros descargados en sla_failed.csv');
+  a.download='adops_slas.csv';a.click();URL.revokeObjectURL(a.href);
+  toast(recs.length+' registros descargados en adops_slas.csv');
 }
 function exportModal(){
   const csv=Papa.unparse(modalRows.map(r=>{const o={};modalCols.forEach(c=>o[c]=r[c]);return o;}));
