@@ -699,7 +699,7 @@ function isExpiredForMonth(r,moNum){
 function renderCampMonth(ctrRows, mainRows){
   const rows2026=ctrRows.filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
   const main2026=(mainRows||[]).filter(r=>(r.anio_evento||r.anio||'').replace(/,/g,'')==='2026');
-  const months=[...new Set([
+  let months=[...new Set([
     ...rows2026.map(firstImpMonth).filter(m=>m!=null),
     ...main2026.map(implMonth).filter(m=>m!=null)
   ])].sort((a,b)=>a-b);
@@ -731,6 +731,12 @@ function renderCampMonth(ctrRows, mainRows){
     const k='new||'+r.carga+'||'+mo;
     (campMonthDrill[k]=campMonthDrill[k]||[]).push(r);
   });
+  /* Solo meses con datos reales: un mes sin ninguna campaña asignada (carga) no se muestra */
+  months=months.filter(mo=>cargas.some(c=>(byCarMo[c]&&byCarMo[c][mo])||(byCarMoNew[c]&&byCarMoNew[c][mo])));
+  if(!months.length){
+    tbl.innerHTML='<tbody><tr><td style="padding:16px;color:var(--muted)">Sin datos 2026 en la base CTR.</td></tr></tbody>';
+    return;
+  }
   let maxVal=0;
   cargas.forEach(c=>months.forEach(mo=>{
     const va=(byCarMo[c]&&byCarMo[c][mo])?byCarMo[c][mo].size:0;
